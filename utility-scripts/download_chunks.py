@@ -26,9 +26,10 @@ def main():
         urls = read_urls(chunkurls_file, padded_start, event.end)
         print len(urls), 'IN RANGE'
        
-        ws = os.path.join(data_dir, event.title.replace(' ', '_')) 
-        if not os.path.exists(ws):
-            os.makedirs(ws)
+        #ws = os.path.join(data_dir, event.title.replace(' ', '_')) 
+        #if not os.path.exists(ws):
+        #    os.makedirs(ws)
+        ws = data_dir
         jobs = []
         for url in urls:
             prefix = url.split('/')[-2]
@@ -43,34 +44,6 @@ def main():
             print '({}/{}) Downloaded'.format(i, njobs), result
 
 
-
-    import sys
-    sys.exit()
-
-
-    event = read_eventdata(eventdata)
-    start_date = event.start.date() - timedelta(days=1)
-    end_date = event.end.date() + timedelta(days=1)
-    print 'EVENT TITLE: {}'.format(event.title)
-    print 'EVENT TYPE: {}'.format(event.type)
-    print 'DATE RANGE: {} -- {}'.format(start_date, end_date)
-    #print 'QUERY WORDS: {}'.format(', '.join(event.query))
-
-    print len(urls), 'IN RANGE'
-
-    jobs = []
-    for url in urls:
-        prefix = url.split('/')[-2]
-        path = os.path.join(ws, prefix)
-        jobs.append((url, path))
-        if not os.path.exists(path):
-            os.makedirs(path)
-    pool = Pool(2)
-    njobs = len(jobs)
-    results = pool.imap_unordered(download_url, jobs) 
-    for i, result in enumerate(results, 1):
-        print '({}/{}) Downloaded'.format(i, njobs), result
-
 def download_url(args):
     url, ws = args
     url_toks = url.split('/')
@@ -78,13 +51,11 @@ def download_url(args):
     xzpath = os.path.splitext(fpath)[0]
     if os.path.exists(xzpath):
         return xzpath
-    #wgetlog = open('wget-log.txt', 'a')
     with open(xzpath, 'wb') as f, open(os.devnull, "w") as fnull:
         subprocess.call(['wget', '-P', ws, '-t', '0', url],
                         stdout=fnull, stderr=fnull)
         subprocess.call(['gpg', '--decrypt', fpath],
                         stdout=f, stderr=fnull)
-    #wgetlog.close()
     os.remove(fpath)
     return xzpath
 
