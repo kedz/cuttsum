@@ -7,8 +7,6 @@ def gen_dates(start, end):
     at hourly intervals."""
     cur_date = start
     while cur_date <= end:
-        for h in range(24):
-            yield '{}-{:02}'.format(cur_date, h)
-
-        cur_date += timedelta(days=1)
+        yield cur_date.strftime('%Y-%m-%d-%H')
+        cur_date += timedelta(hours=1)
 
