@@ -27,8 +27,8 @@ def main():
     print 'OK\n'
 
     start_dt = event.start - timedelta(hours=24)
-    #end_dt = event.end
-    end_dt = start_dt + timedelta(hours=20)
+    end_dt = event.end
+    #end_dt = start_dt + timedelta(hours=20)
     query = tuple(event.query + [w.lower() for w in event.title.split(' ')])
 
     
@@ -79,9 +79,10 @@ def main():
         pool = Pool(n_threads)
         results = pool.imap(worker, jobs)
 
-    alerts = range(5,105,5)
-    first_alert = alerts[0]   
-    last_alert = alerts[-1]
+#    alerts = range(5,105,5)
+#    first_alert = alerts[0]   
+#    last_alert = alerts[-1]
+    first_alert = True
 
     for i, result in enumerate(results, 1):
         per = 100.0 * float(i) / njobs
@@ -107,36 +108,41 @@ def main():
                 latest_dt = dt
         
         relevant_items.extend(relevant_sis)
-        
-        
-        if per >= alerts[0]:
 
-            a = alerts.pop(0) 
-            if a == first_alert:
+
+        total = 0                                    
+        tot_num_si_rel_size = asizeof(tot_num_si_rel) / float(1024**2) 
+        total += tot_num_si_rel_size
+        tot_num_si_irrel_size = asizeof(tot_num_si_irrel) / float(1024**2)
+        total += tot_num_si_irrel_size
+        tot_df_rel_size = asizeof(tot_df_rel) / float(1024**2)
+        total += tot_df_rel_size
+        tot_df_irrel_size = asizeof(tot_df_irrel) / float(1024**2)
+        total += tot_df_irrel_size
+        tot_wc_rel_size = asizeof(tot_wc_rel) / float(1024**2)
+        total += tot_wc_rel_size
+        tot_wc_irrel_size = asizeof(tot_wc_irrel) / float(1024**2)
+        total += tot_wc_irrel_size
+        relevant_items_size = asizeof(relevant_items) / float(1024**2)
+        total += relevant_items_size
+
+
+
+
+                
+        if total/float(1024) > 1 or i == njobs:
+
+            if first_alert is True:
                 append = False
+                first_alert = False
             else:
                 append = True
-            if a == last_alert:
+
+            if i == njobs:
                 clear_cache = True
             else:
                 clear_cache = False
 
-            total = 0                                    
-            tot_num_si_rel_size = asizeof(tot_num_si_rel) / float(1024**2) 
-            total += tot_num_si_rel_size
-            tot_num_si_irrel_size = asizeof(tot_num_si_irrel) / float(1024**2)
-            total += tot_num_si_irrel_size
-            tot_df_rel_size = asizeof(tot_df_rel) / float(1024**2)
-            total += tot_df_rel_size
-            tot_df_irrel_size = asizeof(tot_df_irrel) / float(1024**2)
-            total += tot_df_irrel_size
-            tot_wc_rel_size = asizeof(tot_wc_rel) / float(1024**2)
-            total += tot_wc_rel_size
-            tot_wc_irrel_size = asizeof(tot_wc_irrel) / float(1024**2)
-            total += tot_wc_irrel_size
-            relevant_items_size = asizeof(relevant_items) / float(1024**2)
-            total += relevant_items_size
-            
             print '\r',
             print datetime.now(), '|| Relevant:', num_rel, 
             print ' || Irrelevant:', num_irrel
@@ -193,7 +199,7 @@ def clear_rel_si_cache(relevant_items, output_chunk, latest_dt, clear_cache):
     relevant_items.sort(key=lambda x: x[0])
     print 'OK'
     
-    cutoff = latest_dt - timedelta(hours=2)
+    cutoff = latest_dt - timedelta(hours=1)
     for dt, si in relevant_items:
         if dt < cutoff or clear_cache is True:
             write_items.append(si)
