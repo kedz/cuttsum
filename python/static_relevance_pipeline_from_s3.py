@@ -418,25 +418,40 @@ def download_url(url, ws):
     if os.path.exists(xzpath):
         return xzpath
 
+    tries = 0
+    success = False
+    while tries < 3 and success is False:
 
-    with open(xzpath, 'wb') as f, open(os.devnull, "w") as fnull:
         p1 = subprocess.Popen(['curl', '-o' , fpath, url])
-        #subprocess.call(['wget', '-P', ws, '-t', '0', url],
-        #                stdout=fnull, stderr=fnull)
 
         elapsed = 0
         last_time = time.time()
         print p1.poll()
-        while p1.poll() is None and elapsed < 15:
+        while p1.poll() is None and elapsed < 20:
             time.sleep(1)
             elapsed = time.time() - last_time 
         
         if p1.poll() is None:
             p1.terminate()
-            print
-            print "KILLING:", url
-            return None
+            tries += 1
+            print 'Tries', tries
+            time.sleep(2)
+        else:
+            success = True
 
+    if success is False:
+
+        print
+        print "KILLING:", url
+        return None
+
+
+
+
+    with open(xzpath, 'wb') as f, open(os.devnull, "w") as fnull:
+        #subprocess.call(['wget', '-P', ws, '-t', '0', url],
+        #                stdout=fnull, stderr=fnull)
+        
         subprocess.call(['gpg', '--decrypt', fpath],
                               stdout=f, stderr=fnull)
 
