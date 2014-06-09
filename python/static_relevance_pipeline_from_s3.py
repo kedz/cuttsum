@@ -422,19 +422,22 @@ def download_url(url, ws):
     success = False
     while tries < 3 and success is False:
 
-        p1 = subprocess.Popen(['curl', '-o' , fpath, url])
+        p1 = subprocess.Popen(['curl', '-s', '-S', '-o' , fpath, url])
 
         elapsed = 0
         last_time = time.time()
-        print p1.poll()
         while p1.poll() is None and elapsed < 20:
             time.sleep(1)
             elapsed = time.time() - last_time 
         
-        if p1.poll() is None or not os.path.exists(fpath):
+        if p1.poll() is None:
             p1.terminate()
             tries += 1
-            print 'Tries', tries
+            #print 'Tries', tries
+            time.sleep(2)
+        elif not os.path.exists(fpath):
+            tries += 1
+            #print 'Tries', tries
             time.sleep(2)
         else:
             success = True
@@ -442,11 +445,8 @@ def download_url(url, ws):
     if success is False:
 
         print
-        print "KILLING:", url
+        print "FAILED TO RETRIEVE:", url
         return None
-
-
-
 
     with open(xzpath, 'wb') as f, open(os.devnull, "w") as fnull:
         #subprocess.call(['wget', '-P', ws, '-t', '0', url],
@@ -454,16 +454,6 @@ def download_url(url, ws):
         
         subprocess.call(['gpg', '--decrypt', fpath],
                               stdout=f, stderr=fnull)
-
-
-
-
-#    thread = threading.Thread(target=runner)
-#    thread.start()
-#    thread.join(10)
-#    if thread.is_alive():
-#        print 'Failed to download:', url
-            
 
     os.remove(fpath)
     return xzpath
