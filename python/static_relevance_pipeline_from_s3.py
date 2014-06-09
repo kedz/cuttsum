@@ -1,9 +1,9 @@
 import os
 import argparse
 from cuttsum.event import read_events_xml
-from cuttsum.util import gen_dates
+from cuttsum.util import gen_dates, memory, resident, stacksize
 import streamcorpus as sc
-from multiprocessing import Pool
+from multiprocessing import Pool, Value
 from datetime import datetime, timedelta
 import re
 from collections import defaultdict
@@ -11,6 +11,10 @@ import sys
 import cPickle as pickle
 import pympler
 import subprocess
+from time import sleep
+import gc
+
+stop_flag = Value('i', 0)
 
 def main():
     args = parse_args()
@@ -34,6 +38,7 @@ def main():
     
     sys.stdout.write('Reading urls from {}...\t'.format(chunkurls_file))
     sys.stdout.flush()
+    global stop_flag
     urls = read_urls(chunkurls_file, start_dt, end_dt)
     jobs = [(query, url, ws) for url in urls]
     print 'OK'
@@ -76,7 +81,8 @@ def main():
     if n_threads == 1:
         results = single_threaded_worker(jobs)
     else:
-        pool = Pool(n_threads)
+
+        pool = Pool(n_threads, maxtasksperchild=2)
         results = pool.imap(worker, jobs)
 
 #    alerts = range(5,105,5)
@@ -84,23 +90,47 @@ def main():
 #    last_alert = alerts[-1]
     first_alert = True
 
+
+
+
     for i, result in enumerate(results, 1):
         per = 100.0 * float(i) / njobs
 
         if sys.stdout.isatty():
-            sys.stdout.write('\r{:2.2f}% complete'.format(per))
+            sys.stdout.write('{:2.2f}% complete\r'.format(per))
             sys.stdout.flush()
+        print i, memory()/float(1024**3), resident()/float(1024**3), 
+        print stacksize()/float(1024**3)
+        print 
 
         num_si_rel, num_si_irrel, df_rel, df_irrel = result[0:4]
         wc_rel, wc_irrel, lnum_rel, lnum_irrel, relevant_sis = result[4:]
        
+        if i == 1:
+            append = False
+        else:
+            append = True
+
+
+
+        pickle_stats(tot_num_si_rel, 'num_si_rel.p', output_stats, append)
+        pickle_stats(tot_num_si_irrel, 'num_si_irrel.p', 
+                     output_stats, append)
+        pickle_stats(tot_df_rel, 'df_rel.p', output_stats, append)
+        pickle_stats(tot_df_irrel, 'df_irrel.p', output_stats, append)
+        pickle_stats(tot_wc_rel, 'wc_rel.p', output_stats, append)
+        pickle_stats(tot_wc_irrel, 'wc_irrel.p', output_stats, append)
+
+
+
+
         num_rel += lnum_rel
         num_irrel += lnum_irrel
 
-        update_stats(num_si_rel, num_si_irrel,
-                     df_rel, df_irrel, wc_rel, wc_irrel, 
-                     tot_num_si_rel, tot_num_si_irrel,
-                     tot_df_rel, tot_df_irrel, tot_wc_rel, tot_wc_irrel)
+        #update_stats(num_si_rel, num_si_irrel,
+        #             df_rel, df_irrel, wc_rel, wc_irrel, 
+        #             tot_num_si_rel, tot_num_si_irrel,
+        #             tot_df_rel, tot_df_irrel, tot_wc_rel, tot_wc_irrel)
  
 
         for dt, si in relevant_sis:
@@ -111,27 +141,43 @@ def main():
 
 
         total = 0                                    
-        tot_num_si_rel_size = asizeof(tot_num_si_rel) / float(1024**2) 
-        total += tot_num_si_rel_size
-        tot_num_si_irrel_size = asizeof(tot_num_si_irrel) / float(1024**2)
-        total += tot_num_si_irrel_size
-        tot_df_rel_size = asizeof(tot_df_rel) / float(1024**2)
-        total += tot_df_rel_size
-        tot_df_irrel_size = asizeof(tot_df_irrel) / float(1024**2)
-        total += tot_df_irrel_size
-        tot_wc_rel_size = asizeof(tot_wc_rel) / float(1024**2)
-        total += tot_wc_rel_size
-        tot_wc_irrel_size = asizeof(tot_wc_irrel) / float(1024**2)
-        total += tot_wc_irrel_size
+#        tot_num_si_rel_size = asizeof(tot_num_si_rel) / float(1024**2) 
+#        total += tot_num_si_rel_size
+#        tot_num_si_irrel_size = asizeof(tot_num_si_irrel) / float(1024**2)
+#        total += tot_num_si_irrel_size
+#        tot_df_rel_size = asizeof(tot_df_rel) / float(1024**2)
+#        total += tot_df_rel_size
+#        tot_df_irrel_size = asizeof(tot_df_irrel) / float(1024**2)
+#        total += tot_df_irrel_size
+#        tot_wc_rel_size = asizeof(tot_wc_rel) / float(1024**2)
+#        total += tot_wc_rel_size
+ #       tot_wc_irrel_size = asizeof(tot_wc_irrel) / float(1024**2)
+#        total += tot_wc_irrel_size
         relevant_items_size = asizeof(relevant_items) / float(1024**2)
         total += relevant_items_size
 
-
+        print 'Memory'
+        print '======'
+#        print '{:25} : {:7.2f}mb'.format('tot_num_si_rel', 
+#                                         tot_num_si_rel_size)
+#        print '{:25} : {:7.2f}mb'.format('tot_num_si_irrel', 
+#                                         tot_num_si_irrel_size)
+#        print '{:25} : {:7.2f}mb'.format('tot_df_rel', tot_df_rel_size)
+#        print '{:25} : {:7.2f}mb'.format('tot_df_irrel', tot_df_irrel_size)
+#        print '{:25} : {:7.2f}mb'.format('tot_wc_rel', tot_wc_rel_size)
+#        print '{:25} : {:7.2f}mb'.format('tot_wc_irrel', tot_wc_irrel_size)
+        print '{:25} : {:7.2f}mb'.format('relevant_items',
+                                         relevant_items_size)
+        print '-' * 25
+        print '{:25} : {:7.2f}mb'.format('Total', total)
+        print 
 
 
                 
-        if total/float(1024) > 1 or i == njobs:
+        if total / float(1024) > .1 or i == njobs:
+            stop_flag.value = 1
 
+            print "CLEARING SOME STUFF"
             if first_alert is True:
                 append = False
                 first_alert = False
@@ -143,6 +189,9 @@ def main():
             else:
                 clear_cache = False
 
+
+
+
             print '\r',
             print datetime.now(), '|| Relevant:', num_rel, 
             print ' || Irrelevant:', num_irrel
@@ -151,40 +200,29 @@ def main():
             print '==========================='
             print latest_dt
             print
-            print 'Memory'
-            print '======'
-            print '{:25} : {:7.2f}mb'.format('tot_num_si_rel', 
-                                             tot_num_si_rel_size)
-            print '{:25} : {:7.2f}mb'.format('tot_num_si_irrel', 
-                                             tot_num_si_irrel_size)
-            print '{:25} : {:7.2f}mb'.format('tot_df_rel', tot_df_rel_size)
-            print '{:25} : {:7.2f}mb'.format('tot_df_irrel', tot_df_irrel_size)
-            print '{:25} : {:7.2f}mb'.format('tot_wc_rel', tot_wc_rel_size)
-            print '{:25} : {:7.2f}mb'.format('tot_wc_irrel', tot_wc_irrel_size)
-            print '{:25} : {:7.2f}mb'.format('relevant_items',
-                                             relevant_items_size)
-            print '-' * 25
-            print '{:25} : {:7.2f}mb'.format('Total', total)
-            print 
-        
-            pickle_stats(tot_num_si_rel, 'num_si_rel.p', output_stats, append)
-            pickle_stats(tot_num_si_irrel, 'num_si_irrel.p', 
-                         output_stats, append)
-            pickle_stats(tot_df_rel, 'df_rel.p', output_stats, append)
-            pickle_stats(tot_df_irrel, 'df_irrel.p', output_stats, append)
-            pickle_stats(tot_wc_rel, 'wc_rel.p', output_stats, append)
-            pickle_stats(tot_wc_irrel, 'wc_irrel.p', output_stats, append)
-            tot_num_si_rel = defaultdict(int)
-            tot_num_si_irrel = defaultdict(int)
-            tot_df_rel = {}
-            tot_df_irrel = {}
-            tot_wc_rel = {}
-            tot_wc_irrel = {}
-            print
-
+       
+            
+#            tot_num_si_rel = None
+#            tot_num_si_irrel = None
+#            tot_df_rel = None
+#            tot_df_irrel = None
+#            tot_wc_rel = None
+#            tot_wc_irrel = None
+#            gc.collect()
+#            tot_num_si_rel = defaultdict(int)
+#            tot_num_si_irrel = defaultdict(int)
+#            tot_df_rel = {}
+#            tot_df_irrel = {}
+#            tot_wc_rel = {}
+#            tot_wc_irrel = {}
+#            print
+#
             relevant_items = clear_rel_si_cache(relevant_items, output_chunk,
                                                 latest_dt, clear_cache)
 
+            stop_flag.value = 0
+    
+        print 'comp'
     pickle_stats(event, 'event.p', output_stats, False)
 
     print '\r100.00% complete' 
@@ -306,8 +344,13 @@ def single_threaded_worker(jobs):
         yield worker(job)
 
 def worker(args):
-    query, url, ws = args
+    query, url, ws  = args
     path = download_url(url, ws)
+
+    global stop_flag
+    while stop_flag.value != 0:
+        sleep(1)
+
     msg = sc.StreamItem_v0_2_0
     
     relevant_sis = []
