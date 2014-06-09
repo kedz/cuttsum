@@ -12,6 +12,7 @@ import cPickle as pickle
 import pympler
 import subprocess
 from time import sleep
+import time
 import gc
 
 stop_flag = Value('i', 0)
@@ -364,46 +365,48 @@ def worker(args):
     num_rel = 0
     num_irrel = 0 
 
-    for si in sc.Chunk(path=path, message=msg):
+    if path is not None:
 
-        st = sc.make_stream_time(si.stream_time.zulu_timestamp) 
-        dt = datetime.utcfromtimestamp(int(st.epoch_ticks))
-        dtstr = dt.strftime('%Y-%m-%d-%H')  
-  
-        if si.body.clean_visible is None:
-            relevant = False
-        else:
-            relevant = check_relevance(query, si.body.clean_visible)
+        for si in sc.Chunk(path=path, message=msg):
 
-        if relevant is True:
-            num_rel += 1
-            if dtstr not in df_rel:
-                df_rel[dtstr] = defaultdict(int)
-            if dtstr not in wc_rel:
-                wc_rel[dtstr] = defaultdict(int)
+            st = sc.make_stream_time(si.stream_time.zulu_timestamp) 
+            dt = datetime.utcfromtimestamp(int(st.epoch_ticks))
+            dtstr = dt.strftime('%Y-%m-%d-%H')  
+      
+            if si.body.clean_visible is None:
+                relevant = False
+            else:
+                relevant = check_relevance(query, si.body.clean_visible)
 
-            relevant_sis.append((dt, si))
-            num_si_rel[dtstr] += 1
-            
-            for sentence in si.body.sentences['lingpipe']:
-                for token in sentence.tokens:
-                    df_rel[dtstr][token.token.lower()] = 1    
-                    wc_rel[dtstr][token.token.lower()] += 1
-        else:
-            num_irrel += 1
-            if dtstr not in df_irrel:
-                df_irrel[dtstr] = defaultdict(int)
-            if dtstr not in wc_irrel:
-                wc_irrel[dtstr] = defaultdict(int)
+            if relevant is True:
+                num_rel += 1
+                if dtstr not in df_rel:
+                    df_rel[dtstr] = defaultdict(int)
+                if dtstr not in wc_rel:
+                    wc_rel[dtstr] = defaultdict(int)
 
-            num_si_irrel[dtstr] += 1
+                relevant_sis.append((dt, si))
+                num_si_rel[dtstr] += 1
+                
+                for sentence in si.body.sentences['lingpipe']:
+                    for token in sentence.tokens:
+                        df_rel[dtstr][token.token.lower()] = 1    
+                        wc_rel[dtstr][token.token.lower()] += 1
+            else:
+                num_irrel += 1
+                if dtstr not in df_irrel:
+                    df_irrel[dtstr] = defaultdict(int)
+                if dtstr not in wc_irrel:
+                    wc_irrel[dtstr] = defaultdict(int)
 
-            for sentence in si.body.sentences['lingpipe']:
-                for token in sentence.tokens:
-                    df_irrel[dtstr][token.token.lower()] = 1    
-                    wc_irrel[dtstr][token.token.lower()] += 1
+                num_si_irrel[dtstr] += 1
 
-    os.remove(path)
+                for sentence in si.body.sentences['lingpipe']:
+                    for token in sentence.tokens:
+                        df_irrel[dtstr][token.token.lower()] = 1    
+                        wc_irrel[dtstr][token.token.lower()] += 1
+
+        os.remove(path)
 
     return (num_si_rel, num_si_irrel, df_rel, 
             df_irrel, wc_rel, wc_irrel, num_rel, num_irrel, relevant_sis)
@@ -414,12 +417,39 @@ def download_url(url, ws):
     xzpath = os.path.splitext(fpath)[0]
     if os.path.exists(xzpath):
         return xzpath
+
+
     with open(xzpath, 'wb') as f, open(os.devnull, "w") as fnull:
-        subprocess.call(['curl', '-o' , fpath, url])
+        p1 = subprocess.Popen(['curl', '-o' , fpath, url])
         #subprocess.call(['wget', '-P', ws, '-t', '0', url],
         #                stdout=fnull, stderr=fnull)
+
+        elapsed = 0
+        last_time = time.time()
+        print p1.poll()
+        while p1.poll() is None and elapsed < 15:
+            time.sleep(1)
+            elapsed = time.time() - last_time 
+        
+        if p1.poll() is None:
+            p1.terminate()
+            print
+            print "KILLING:", url
+            return None
+
         subprocess.call(['gpg', '--decrypt', fpath],
-                        stdout=f, stderr=fnull)
+                              stdout=f, stderr=fnull)
+
+
+
+
+#    thread = threading.Thread(target=runner)
+#    thread.start()
+#    thread.join(10)
+#    if thread.is_alive():
+#        print 'Failed to download:', url
+            
+
     os.remove(fpath)
     return xzpath
 
