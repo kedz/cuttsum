@@ -431,7 +431,7 @@ def download_url(url, ws):
             time.sleep(1)
             elapsed = time.time() - last_time 
         
-        if p1.poll() is None:
+        if p1.poll() is None or not os.path.exists(fpath):
             p1.terminate()
             tries += 1
             print 'Tries', tries
