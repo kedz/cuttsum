@@ -415,8 +415,9 @@ def download_url(url, ws):
     if os.path.exists(xzpath):
         return xzpath
     with open(xzpath, 'wb') as f, open(os.devnull, "w") as fnull:
-        subprocess.call(['wget', '-P', ws, '-t', '0', url],
-                        stdout=fnull, stderr=fnull)
+        subprocess.call(['curl', '-o' , fpath, url])
+        #subprocess.call(['wget', '-P', ws, '-t', '0', url],
+        #                stdout=fnull, stderr=fnull)
         subprocess.call(['gpg', '--decrypt', fpath],
                         stdout=f, stderr=fnull)
     os.remove(fpath)
