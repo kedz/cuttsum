@@ -30,7 +30,7 @@ def main():
 
     print 'Total Jobs:', len(chunks)
     for i, chunk in enumerate(chunks):
-        print 'CPU', i+1, '--', len(chunk), 'path(s)'
+        print 'CPU', i+1, '--', len(chunk), 'file(s)'
 
     tmpfiles = []
     for i in range(cpus):
