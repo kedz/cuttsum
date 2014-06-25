@@ -6,7 +6,7 @@ def read_events_xml(eventxml):
     ts_events = []
     for event, elem in ET.iterparse(eventxml, events=('end',)):
         if elem.tag == 'event':
-            query_id = int(elem.findtext('id'))
+            query_id = elem.findtext('id')
             title = elem.findtext('title')    
             event_type = elem.findtext('type')
             query = elem.findtext('query').split(' ')
