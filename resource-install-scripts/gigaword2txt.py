@@ -64,7 +64,8 @@ def worker(args):
             sstr = u' '.join(word for word 
                              in word_detector.tokenize(sent))
             tkns = filter(None, sstr.split(u' '))
-            yield u' '.join(tkns)
+            if len(tkns) > 0:
+                yield u' '.join(tkns)
 
     chunk, ofile = args
  
