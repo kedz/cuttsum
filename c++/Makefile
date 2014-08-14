@@ -2,7 +2,7 @@ install: wrapper
 	mv *.o *.so lib
 
 wrapper: SRILMClient.o SRILMClientWrapper.o
-	g++  -shared -Wall -pthread -L$(BOOST_LIB) -L$(SRILM_LIB)   SRILMClientWrapper.o SRILMClient.o -loolm -ldstruct -lmisc -lboost_python  -fpic -o srilm_client.so
+	g++  -shared -Wall -pthread -L$(BOOST_LIB) -L$(SRILM_LIB)   SRILMClientWrapper.o SRILMClient.o -loolm -ldstruct -lmisc -lboost_python -lz -lgomp -fpic -o srilm_client.so
 
 SRILMClientWrapper.o: SRILMClientWrapper.cc
 	g++ -Wall -c SRILMClientWrapper.cc -I$(SRILM_INC) -I$(PY_INC) -fpic
