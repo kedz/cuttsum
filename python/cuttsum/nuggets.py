@@ -21,7 +21,7 @@ def read_nuggets_tsv(tsv, filter_query_id=None):
             timestamp = datetime.utcfromtimestamp(int(items[2]))
             importance = int(items[3])
             length = int(items[4])
-            text = items[5]
+            text = items[5].decode('utf-8')
             nugget = Nugget(query_id, nugget_id, timestamp,
                             importance, length, text)
             if filter_query_id is None or nugget.query_id == filter_query_id:
