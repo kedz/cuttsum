@@ -3,7 +3,7 @@ import codecs
 from cuttsum.util import hour_str2datetime_interval 
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.cluster import AffinityPropagation
 
 class SummarizerBase(object):
@@ -82,6 +82,14 @@ class SummarizerBase(object):
         else:
             return index_set
 
+    def non_update_matching_indices(self, X, threshold=.75):
+        if self.update_vecs_.shape[0] == 0:
+            return np.arange(0,X.shape[0])
+        n_points = X.shape[0]
+        S = cosine_similarity(X, self.update_vecs_)
+        M = np.amax(S, axis=1)
+        return np.where(M < threshold)[0]
+
     def write_updates(self, odir):
     
         updates_file = os.path.join(odir, u'updates.txt')
@@ -101,7 +109,8 @@ class SummarizerBase(object):
 
 
 class RankSummarizer(SummarizerBase):
-    
+
+
     def run(self, data_reader, odir, n_return, penalty_mode):
 
         log_handle, log_system = logger(odir)
@@ -111,6 +120,7 @@ class RankSummarizer(SummarizerBase):
             time_int = hour_str2datetime_interval(hour)
             n_points_total = X.shape[0]
 
+            
             ### DEDUP ###        
             I = self.unique_indices(unicodes, saliences)
             unicodes = unicodes[I]
@@ -157,16 +167,61 @@ class RankSummarizer(SummarizerBase):
         self.write_updates(odir)
         log_handle.close()
 
+stopwords = set(['a', u'is', 'was', 'be', 'are', 'had', 'has', 'have',
+                 'he', 'she', 'him', 'her', 'it', 'i',
+                 'the', 'this', 'these', 'those', 'a.m.', 'p.m.', 'est', 'pst',
+                 'n\'t', u'\'s', '``', '\'\'', u'`', u'\'',
+                 '"', '.', ';', '?', '!',
+                 'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'decemeber'])
+ 
+
 class APSummarizer(SummarizerBase):
 
-    def run(self, data_reader, odir, penalty_mode):
+    
+    def simple_filter(self, unicodes):
+        import re
+        indices = []
+        for i, uni in enumerate(unicodes):
+            tokens = uni.lower().split(u' ')
+            content_words = 0
+            for token in tokens:
+                if token in stopwords:
+                    continue
+                if re.match(r'^[\d\-\.\+]+$', token):
+                    continue
+                content_words += 1
+            if content_words > 2:
+                indices.append(i)
+                #print "GOOD", uni.encode(u'utf-8')
+            #else:
+            #    print "BAD", uni.encode(u'utf-8')
+        return np.array(indices)
+
+    def run(self, data_reader, odir, penalty_mode, scale=1.0,
+            repulsion=1.0, update_cutoff=1.0, update_sim_threshold=.75):
         
+        stdsclr = StandardScaler() 
         log_handle, log_system = logger(odir)
         saliences_pen = None
 
         for hour, labels, unicodes, saliences, X, in data_reader:
             time_int = hour_str2datetime_interval(hour)
             n_points_total = X.shape[0]
+
+
+#            I = self.simple_filter(unicodes)
+#            unicodes = unicodes[I]
+#            saliences = saliences[I]
+#            X = X[I,:]
+#            labels = [labels[idx] for idx in I] 
+
+            ### REMOVE INPUTS THAT MATCH PREVIOUS UPATES ###
+            I = self.non_update_matching_indices(
+                X, threshold=update_sim_threshold)
+            unicodes = unicodes[I]
+            saliences = saliences[I]
+            X = X[I,:]
+            labels = [labels[idx] for idx in I] 
 
             ### DEDUP AND COUNT DUPLICATES ###
             I, counts = self.unique_indices(
@@ -184,13 +239,13 @@ class APSummarizer(SummarizerBase):
 
             if self.use_temp_ is True and self.n_updates_ > 0:
                 saliences_pen = self.penalize_salience(
-                    saliences, X, penalty_mode, scale=100.0)
+                    saliences, X, penalty_mode, scale=repulsion)
                 ranks = saliences_pen
             else:
                 ranks = saliences
 
             ### Init Preferences and Similarities ###
-            P = self.compute_preferences(ranks, n_points, counts)
+            P = self.compute_preferences(ranks, n_points, counts, scale)
             A = self.compute_affinities(X, P, counts)
 
             af = AffinityPropagation(
@@ -200,10 +255,15 @@ class APSummarizer(SummarizerBase):
             exemplars = af.cluster_centers_indices_
             assignments = exemplars[af.labels_]
 
+            if saliences_pen is None:
+                ranks = stdsclr.fit_transform(saliences[:,np.newaxis])
+            else:
+                ranks = stdsclr.fit_transform(saliences_pen[:,np.newaxis])
+
             update_idxs = [e for e in exemplars 
-                           if saliences[e] > 2.0]
-                           #if np.where(assignments == e)[0].shape[0] - 1 > 0 \
-                           #and saliences[e] > 2.0]
+                           if ranks[e] > update_cutoff \
+                           and np.where(assignments == e)[0].shape[0] > 1]
+
 
             sorted_idxs = []
             for e in exemplars:
@@ -233,9 +293,9 @@ class APSummarizer(SummarizerBase):
 
         self.write_updates(odir)
 
-    def compute_preferences(self, saliences, n_points, counts):
+    def compute_preferences(self, saliences, n_points, counts, scale=100.0):
         saliences = saliences.reshape(n_points, 1)
-        amax = np.minimum(-7 + np.exp(-np.log(n_points/100.0)), -2)
+        amax = np.minimum(-7 + np.exp(-np.log(n_points/float(scale))), -2)
         scaler = MinMaxScaler(feature_range=(-9, amax))
         return scaler.fit_transform(saliences)
 
