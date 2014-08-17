@@ -8,14 +8,14 @@ def main():
     args = parse_args()
     bow_file, lvec_file, sim_file = args[u'input_files']
     odir = args[u'output']
-    dbg_sim_mode, use_temp, penalty_mode = args[u'params']
+    dbg_smode, temp, pmode, scale, repulsion, u_thr, u_s_thr = args[u'params']
     
     if sim_file is None:
-        if dbg_sim_mode == u'max':
+        if dbg_smode == u'max':
             sim_idx = 3
-        elif dbg_sim_mode == u'min':
+        elif dbg_smode == u'min':
             sim_idx = 4
-        elif dbg_sim_mode == u'avg':
+        elif dbg_smode == u'avg':
             sim_idx = 5
         data_reader = gold_reader(bow_file, lvec_file, sim_idx)
 
@@ -23,14 +23,14 @@ def main():
         print "IMPLEMENT SIM FILE LOADER"
         sys.exit()
 
-    ts_system = APSummarizer(use_temp, vec_dims=100)
-    ts_system.run(data_reader, odir, penalty_mode)
+    ts_system = APSummarizer(temp, vec_dims=100)
+    ts_system.run(data_reader, odir, pmode, scale=scale, repulsion=repulsion,
+                  update_cutoff=u_thr, update_sim_threshold=u_s_thr)
     
     print "Run complete!"
 
 def parse_args():
     parser = argparse.ArgumentParser()
-
 
     parser.add_argument('-b', '--bow-file',
                         help=u'BOW file',
@@ -66,8 +66,21 @@ def parse_args():
                         help=u'agg or max',
                         type=unicode, required=True)
 
-  
+    parser.add_argument('--update-threshold',
+                        help=u'Update salience must be x std devs above the mean',
+                        type=float, required=True)
+    parser.add_argument('--update-sim-threshold',
+                        type=float, required=True)
+    parser.add_argument('--scale', type=float, required=True)
+    parser.add_argument('--repulsion', type=float, required=True)
+
     args = parser.parse_args()
+
+    update_threshold = args.update_threshold
+    update_sim_threshold = args.update_sim_threshold
+    scale = args.scale
+    repulsion = args.repulsion
+
     bow_file = args.bow_file
     lvec_file = args.lvec_file
     sim_file = args.sim_file
@@ -131,7 +144,9 @@ def parse_args():
 
     args_dict = {u'input_files': [bow_file, lvec_file, sim_file],
                  u'output': odir,
-                 u'params': [dbg_sim_mode, use_temp, penalty_mode]}
+                 u'params': [dbg_sim_mode, use_temp, penalty_mode,
+                             repulsion, scale,
+                             update_threshold, update_sim_threshold]}
     return args_dict
 
 if __name__ == '__main__':
