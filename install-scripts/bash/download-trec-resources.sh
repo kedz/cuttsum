@@ -3,9 +3,15 @@ NUGGETS=$DATA/nuggets
 DIRLISTS="${DATA}/dir-lists"
 SC2014_SERIF_ONLY_XZ="kba-streamcorpus-2014-v0_3_0-serif-only.s3-paths.txt.xz"
 SC2014_SERIF_ONLY="kba-streamcorpus-2014-v0_3_0-serif-only.s3-paths.txt"
+# THE TREC TS TRACK ORGANIZERS FILTERED DOC SET
 SC2014_TS_XZ="streamcorpus-2014-v0_3_0-ts-filtered.s3-paths.txt.xz"
 SC2014_TS="streamcorpus-2014-v0_3_0-ts-filtered.s3-paths.txt"
+
+#
 SC2014_SO_TS13="kba-streamcorpus-2014-v0_3_0-serif-only.s3-paths.ts-2013-filtered.txt"
+
+# THIS IS NECESSARY FOR WORD COUNTS
+SC2014_SO_TS14="kba-streamcorpus-2014-v0_3_0-serif-only.s3-paths.ts-2014-filtered.txt"
 
 if [ ! -d $DIRLISTS ]; then
     echo "Making dir-lists directory: $DIRLISTS"
@@ -18,7 +24,7 @@ cd $DIRLISTS
 if [ ! -f $DIRLISTS/$SC2014_SERIF_ONLY ]; then
     if [ ! -f $DIRLISTS/$SC2014_SERIF_ONLY ]; then
         echo "Downloading TREC KBA 2014 url list."
-        wget http://s3.amazonaws.com/aws-publicdatasets/trec/kba/$SC2014_SERIF_ONLY_XZ \
+        wget -nv http://s3.amazonaws.com/aws-publicdatasets/trec/kba/$SC2014_SERIF_ONLY_XZ \
             -O $DIRLISTS/$SC2014_SERIF_ONLY_XZ 
     fi
     xz --decompress $DIRLISTS/$SC2014_SERIF_ONLY_XZ
@@ -29,7 +35,7 @@ fi
 if [ ! -f $DIRLISTS/$SC2014_TS ]; then
     if [ ! -f $DIRLISTS/$SC2014_TS_XZ ]; then
         echo "Downloading TREC KBA 2014 TS 2014 Filtered url list."
-        wget  http://s3.amazonaws.com/aws-publicdatasets/trec/ts/$SC2014_TS_XZ \
+        wget -nv  http://s3.amazonaws.com/aws-publicdatasets/trec/ts/$SC2014_TS_XZ \
             -O $DIRLISTS/$SC2014_TS_XZ 
     fi
     xz --decompress $DIRLISTS/$SC2014_TS_XZ
@@ -88,23 +94,53 @@ else
     echo "Skipping: Filtering hour list with 2013 TREC TS event data..."
 fi
 
-if [ ! -d $DATA/2013-event-chunks ]; then
-    echo "Downloading KBA chunks to: $DATA/2013-event-chunks"
-    mkdir -p $DATA/2013-event-chunks
-    cd $DATA/2013-event-chunks
+if [ ! -f $DIRLISTS/$SC2014_SO_TS14 ]; then
+    echo "Filtering hour list with 2014 TREC TS event data..."
+    python -u $CUTTSUM/install-scripts/python/filter_hours.py \
+        -e $EVENTS/test-events-2014.xml \
+        -l $DIRLISTS/$SC2014_SERIF_ONLY \
+        -f $DIRLISTS/$SC2014_SO_TS14
+else
+    echo "Skipping: Filtering hour list with 2014 TREC TS event data..."
+fi
+
+
+
+if [ ! -d $DATA/2013-serif-only-news-chunks ]; then
+    echo "Downloading KBA chunks to: $DATA/2013-serif-only-news-chunks"
+    mkdir -p $DATA/2013-serif-only-news-chunks
+    cd $DATA/2013-serif-only-news-chunks
     WGETCMD="wget -nv --recursive --continue --no-host-directories "
     WGETCMD="${WGETCMD}--no-parent --reject \"index.html*\" "
     WGETCMD="${WGETCMD}http://s3.amazonaws.com/aws-publicdatasets/trec/kba/"
     WGETCMD="${WGETCMD}kba-streamcorpus-2014-v0_3_0-serif-only/{}" 
     cat $DIRLISTS/$SC2014_SO_TS13 | parallel -j 10 $WGETCMD &>$WGET_LOG
-    cd $DATA/2013-event-chunks
+    cd $DATA/2013-serif-only-news-chunks
     mv aws-publicdatasets/trec/kba/kba-streamcorpus-2014-v0_3_0-serif-only/* .
     rm -rf aws-publicdatasets
 
 
 else
-    echo "Skipping: Downloading KBA chunks to: $DATA/2013-event-chunks"
+    echo "Skipping: Downloading KBA chunks to: $DATA/2013-serif-only-news-chunks"
 fi
+
+if [ ! -d $DATA/2014-serif-only-news-chunks ]; then
+    echo "Downloading KBA chunks to: $DATA/2014-event-chunks"
+    mkdir -p $DATA/2014-serif-only-news-chunks
+    cd $DATA/2014-serif-only-news-chunks
+    WGETCMD="wget -nv --recursive --continue --no-host-directories "
+    WGETCMD="${WGETCMD}--no-parent --reject \"index.html*\" "
+    WGETCMD="${WGETCMD}http://s3.amazonaws.com/aws-publicdatasets/trec/kba/"
+    WGETCMD="${WGETCMD}kba-streamcorpus-2014-v0_3_0-serif-only/{}" 
+    cat $DIRLISTS/$SC2014_SO_TS14 | parallel -j 10 $WGETCMD &>$WGET_LOG
+    cd $DATA/2014-serif-only-news-chunks
+    mv aws-publicdatasets/trec/kba/kba-streamcorpus-2014-v0_3_0-serif-only/* .
+    rm -rf aws-publicdatasets
+
+else
+    echo "Skipping: Downloading KBA chunks to: $DATA/2014-event-chunks"
+fi
+
 
 if [ ! -d $DATA/2014-event-chunks-filtered-ts ]; then
     echo "Downloading KBA 2014 filtered ts chunks to: $DATA/2014-event-chunks-filtered-ts"
