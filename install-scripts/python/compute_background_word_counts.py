@@ -42,7 +42,7 @@ def worker(args):
             lf.write('Counting hour {} ({}/{})\n'.format(hour, i, nhours))
             lf.flush()
             
-            if os.path.exists(wcfile) or os.path.exists(dcfile):
+            if os.path.exists(wcfile) and os.path.exists(dcfile):
                 continue
                         
             counts = defaultdict(int)    
