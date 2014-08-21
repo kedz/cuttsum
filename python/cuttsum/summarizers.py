@@ -236,6 +236,8 @@ class APSummarizer(SummarizerBase):
                 time_int.start, time_int.stop)
             print "Received {} unique sentences from {} total".format(
                 n_points, n_points_total)
+            if n_points <= 1:
+                continue
 
             if self.use_temp_ is True and self.n_updates_ > 0:
                 saliences_pen = self.penalize_salience(
