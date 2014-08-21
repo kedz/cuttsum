@@ -85,16 +85,24 @@ def worker(args):
         try:
             for si_idx, si in enumerate(sc.Chunk(path=chunk)):
 
+                
                 n_docs += 1
-                n_sents += len(si.body.sentences[u'serif'])
-                sent_idxs = artcl_detect.find_articles(si) 
+                if u'serif' in si.body.sentences:
+                    annotator = u'serif'
+                elif u'lingpipe' in si.body.sentences:
+                    annotator = u'lingpipe'
+                else:
+                    continue
+                
+                n_sents += len(si.body.sentences[annotator])
+                sent_idxs = artcl_detect.find_articles(si, annotator) 
                 n_idxs = len(sent_idxs)
                 if n_idxs > 0:
                     n_rel_docs += 1
                     n_rel_sents += n_idxs
                     rel_sents = []
                     for sent_idx in sent_idxs:
-                        rel_sents.append(si.body.sentences['serif'][sent_idx])
+                        rel_sents.append(si.body.sentences[annotator][sent_idx])
                     si.body.sentences['article-clf'] = rel_sents 
                         
                     ochunk.add(si) 

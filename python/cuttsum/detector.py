@@ -15,24 +15,24 @@ class ArticleDetector:
         safe_words = u'|'.join([re.escape(word) for word in event.query])
         self.patt = re.compile(r'({})'.format(safe_words), re.I)
 
-    def find_articles(self, si):
+    def find_articles(self, si, annotator=u'serif'):
         indices = []
-        for arange in self.find_ranges(si):
-            if self.contains_query(si, arange):
+        for arange in self.find_ranges(si, annotator):
+            if self.contains_query(si, arange, annotator):
                 for i in arange:
-                    ntoks = len(si.body.sentences['serif'][i].tokens)
+                    ntoks = len(si.body.sentences[annotator][i].tokens)
                     if ntoks <= self.len_max_cutoff:
                         if ntoks > self.len_min_cutoff:
                             indices.append(i)
 
         return indices
 
-    def contains_query(self, si, arange):
+    def contains_query(self, si, arange, annotator):
         hits = {}
         for word in self.query_words:
             hits[word] = False
         for i in arange:
-            s = si.body.sentences['serif'][i]
+            s = si.body.sentences[annotator][i]
             if len(s.tokens) > self.len_max_cutoff:
                 continue
             sstr = u' '.join(t.token.decode('utf-8') for t in s.tokens)
@@ -43,13 +43,14 @@ class ArticleDetector:
                 return False
         return True
 
-    def find_ranges(self, si):
+    def find_ranges(self, si, annotator=u'serif'):
 
         data = []
-        for sent_id, sent in enumerate(si.body.sentences['serif']):
+        for sent_id, sent in enumerate(si.body.sentences[annotator]):
             feats = self._make_feature_dict(sent, sent_id)
             data.append(feats)
-
+        if len(data) == 0:
+            return []
         X = self._vec.transform(data)
         probs = self._clf.predict_proba(X)
 #        end_probs = self._end_clf.predict_proba(X)
