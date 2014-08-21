@@ -38,9 +38,13 @@ def worker(args):
             wcfile = os.path.join(wcounts_dir, '{}.txt.gz'.format(hour))
             dcfile = os.path.join(dcounts_dir, '{}.txt'.format(hour))
 
+
             lf.write('Counting hour {} ({}/{})\n'.format(hour, i, nhours))
             lf.flush()
             
+            if os.path.exists(wcfile) or os.path.exists(dcfile):
+                continue
+                        
             counts = defaultdict(int)    
             doc_counts = defaultdict(int)
             num_docs = 0
