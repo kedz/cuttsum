@@ -3,7 +3,7 @@ from datetime import datetime
 import urllib2
 from pkg_resources import resource_filename
 import os
-
+import errno
 
 class _KBAStreamCorpus(object):
 
