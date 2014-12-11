@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<events>
+<event>
+	<id>1</id>
+	<title>2012 Buenos Aires Rail Disaster</title>
+	<description>http://en.wikipedia.org/wiki/2012_Buenos_Aires_rail_disaster</description>
+	<start>1329910380</start>
+	<end>1330774380</end>
+	<query>buenos aires train crash</query> 
+	<type>accident</type>
+	<locations/>
+    <deaths/>
+    <injuries/>
+</event>
+<event>
+	<id>2</id>
+	<title>2012 Pakistan garment factory fires</title>
+	<description>http://en.wikipedia.org/wiki/2012_Pakistan_garment_factory_fires</description> 
+	<start>1347368400</start>
+	<end>1348232400</end>
+	<query>pakistan factory fire</query> 
+	<type>accident</type>
+	<locations/>
+	<deaths/>
+	<injuries/>
+</event>
+<event>
+	<id>3</id>
+	<title>2012 Aurora shooting</title>
+	<description>http://en.wikipedia.org/wiki/2012_Aurora_shooting</description>
+	<start>1342766280</start>
+	<end>1343630280</end>
+	<query>colorado shooting</query> 
+	<type>shooting</type>
+	<locations/>
+	<deaths/>
+	<injuries/>
+</event>
+<event>
+	<id>4</id>
+	<title>Wisconsin Sikh temple shooting</title>
+	<description>http://en.wikipedia.org/wiki/Wisconsin_Sikh_temple_shooting</description>
+	<start>1344180300</start>
+	<end>1345044300</end>
+	<query>sikh temple shooting</query> 
+	<type>shooting</type>
+	<locations/>
+	<deaths/>
+	<injuries/>
+</event>
+<event>
+	<id>5</id>
+	<title>Hurricane Isaac (2012)</title>
+	<description>http://en.wikipedia.org/wiki/Hurricane_Isaac_(2012)</description>
+	<start>1346170800</start>
+	<end>1347034800</end>
+	<query>hurricane isaac</query> 
+	<type>storm</type>
+	<locations/>
+	<deaths/>
+	<injuries/>
+	<displaced/>
+	<financialimpact/>
+</event>
+<event>
+	<id>6</id>
+	<title>Hurricane Sandy</title>
+	<description>http://en.wikipedia.org/wiki/Hurricane_Sandy</description>
+	<start>1351090800</start>
+	<end>1351954800</end>
+	<query>hurricane sandy</query> 
+	<type>storm</type>
+	<locations/>
+    <deaths/>
+	<injuries/>
+	<displaced/>
+	<financialimpact/>
+</event>
+<event>
+	<id>7</id>
+	<title>June 2012 North American derecho</title>
+	<description>http://en.wikipedia.org/wiki/June_2012_North_American_derecho</description>
+	<start>1340982000</start>
+	<end>1341846000</end>
+	<query>midwest derecho</query>
+	<type>storm</type>
+	<locations/>
+	<deaths/>
+	<injuries/>
+	<displaced/>
+	<financialimpact/>
+</event>
+<event>
+	<id>8</id>
+	<title>Typhoon Bopha</title>
+	<description>http://en.wikipedia.org/wiki/Typhoon_Bopha</description>
+	<start>1354286700</start>
+	<end>1355150700</end>
+	<query>typhoon bopha</query> 
+	<type>storm</type>
+	<locations/>
+	<deaths/>
+	<injuries/>
+	<displaced/>
+	<financialimpact/>
+</event>
+<event>
+	<id>9</id>
+	<title>2012 Guatemala earthquake</title>
+	<description>http://en.wikipedia.org/wiki/2012_Guatemala_earthquake</description>
+	<start>1352306147</start>
+	<end>1353170147</end>
+	<query>guatemala earthquake</query> 
+	<type>earthquake</type>
+	<locations/>
+	<deaths/>
+	<injuries/>
+	<displaced/>
+	<financialimpact/>
+</event>
+<event>
+	<id>10</id>
+	<title>2012 Tel Aviv bus bombing</title>
+	<description>http://en.wikipedia.org/wiki/2012_Tel_Aviv_bus_bombing</description>
+	<start>1353492000</start>
+	<end>1354356000</end>
+	<query>tel aviv bus bombing</query> 
+	<type>bombing</type>
+	<locations/>
+	<deaths/>
+	<injuries/>
+</event>
+</events>
