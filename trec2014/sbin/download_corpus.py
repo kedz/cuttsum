@@ -17,42 +17,44 @@ def worker(args):
 def main(n_procs, trec_dir):
     pool = Pool(n_procs)
     corpus = kba.EnglishAndUnknown2013()
+    event_dir = u'2013_english_and_unknown'
+    dest = os.path.join(trec_dir, event_dir)
+    if not os.path.exists(dest):
+        os.makedirs(dest)
+
     for event in events.get_2013_events():
         print event 
-        event_dir = os.path.join(
-            u'2013_english_and_unknown', u'{}'.format(event.fs_safe_title()))
-        dest = os.path.join(trec_dir, event_dir)
-        if not os.path.exists(dest):
-            os.makedirs(dest)
         jobs = [(path, dest, corpus) for ts, dmn, ct, path
                 in corpus.paths(event.start, event.end, domains)]
         for result in pool.imap(worker, jobs):
             print result
 
     corpus = kba.FilteredTS2014()
+    event_dir = u'2014_filtered_ts'
+    dest = os.path.join(trec_dir, event_dir)
+    if not os.path.exists(dest):
+        os.makedirs(dest)
+
     for event in events.get_2014_events():
         print event 
-        event_dir = os.path.join(
-            u'2014_filtered_ts', u'{}'.format(event.fs_safe_title()))
-        dest = os.path.join(trec_dir, event_dir)
-        if not os.path.exists(dest):
-            os.makedirs(dest)
         jobs = [(path, dest, corpus) for ts, dmn, ct, path
                 in corpus.paths(event.start, event.end, domains)]
+        
         pool = Pool(n_procs)
         for result in pool.imap(worker, jobs):
             print result
 
     corpus = kba.SerifOnly2014()
+    event_dir = u'2014_serif_only'
+    dest = os.path.join(trec_dir, event_dir)
+    if not os.path.exists(dest):
+        os.makedirs(dest)
+
     for event in events.get_2014_events():
         print event 
-        event_dir = os.path.join(
-            u'2014_serif_only', u'{}'.format(event.fs_safe_title()))
-        dest = os.path.join(trec_dir, event_dir)
-        if not os.path.exists(dest):
-            os.makedirs(dest)
         jobs = [(path, dest, corpus) for ts, dmn, ct, path
                 in corpus.paths(event.start, event.end, domains)]
+                
         pool = Pool(n_procs)
         for result in pool.imap(worker, jobs):
             print result
