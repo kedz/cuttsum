@@ -32,7 +32,7 @@ class _KBAStreamCorpus(object):
             try:
                 os.makedirs(dest_parent)
             except OSError, e:
-                if e.errno == errno.EEXIST and os.path.isdir(folder_location):
+                if e.errno == errno.EEXIST and os.path.isdir(dest_parent):
                     # File exists, and it's a directory,
                     # another process beat us to creating this dir, that's OK.
                     pass
