@@ -29,7 +29,17 @@ class _KBAStreamCorpus(object):
         dest = os.path.join(dest_dir, path)
         dest_parent = os.path.dirname(dest)
         if not os.path.isdir(dest_parent):
-            os.makedirs(dest_parent)
+            try:
+                os.makedirs(dest_parent)
+            except OSError, e:
+                if e.errno == errno.EEXIST and os.path.isdir(folder_location):
+                    # File exists, and it's a directory,
+                    # another process beat us to creating this dir, that's OK.
+                    pass
+                else:
+                    # Our target dir exists as a file, or different error,
+                    # reraise the error!
+                    raise
         print url
         u = urllib2.urlopen(url)
         f = open(dest, 'wb')
