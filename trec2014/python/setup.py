@@ -25,7 +25,16 @@ def setup_package_data():
                 u'*.gz'),
             os.path.join(u'2014-data', 
                 u'streamcorpus-2014-v0_3_0-ts-filtered.s3-paths.txt.gz'),
-            os.path.join(u'2014-data', u'cunlp-updates.ssv.gz')]
+            os.path.join(u'2014-data', u'cunlp-updates.ssv.gz'),
+            os.path.join(u'models'),
+            os.path.join(u'models', u'article_clf.pkl'),      
+            os.path.join(u'models', u'article_clf.pkl_01.npy'),
+            os.path.join(u'models', u'article_clf.pkl_02.npy'),
+            os.path.join(u'models', u'article_clf.pkl_03.npy'),
+            os.path.join(u'models', u'article_clf.pkl_04.npy'),
+            os.path.join(u'models', u'article_clf.pkl_05.npy'),
+            os.path.join(u'models', u'article_vectorizer.pkl')]
+         
     return {'cuttsum': data}
 
 
