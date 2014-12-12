@@ -2,17 +2,39 @@ from cuttsum import kba
 from cuttsum import events
 import os
 from multiprocessing import Pool
+import subprocess
+import re
 
 domains = set([u'news', u'MAINSTREAM_NEWS'])
+
+def validate_chunk_checksum(path):
+    fname = os.path.split(path)[-1]
+    m = re.search(r'\w+-\d+-(.*?)-(.*?)\.sc', fname)
+    if m is None: 
+        return False
+    else:
+        check_sum = m.groups()[1]
+        sp_out = subprocess.check_output(
+            "gpg -d {} | xzcat | md5sum".format(path), shell=True)
+        actual_check_sum = sp_out.split(' ')[0]
+        return check_sum == actual_check_sum
 
 def worker(args):
     path, dest, corpus = args
     date, chunk = path.split('/')
-    if os.path.exists(os.path.join(dest, date, chunk)):
-        return path
-    else:
-        corpus.download_path(path, dest)
-        return path
+    tgt = os.path.join(dest, date, chunk)
+
+    if os.path.exists(tgt):
+        valid = validate_chunk_checksum(tgt)
+    
+        if valid:
+            return path
+        else:
+            print path, "is not correct downloading again."
+            os.remove(tgt)
+    
+    corpus.download_path(path, dest)
+    return path
 
 def main(n_procs, trec_dir):
     pool = Pool(n_procs)
@@ -61,7 +83,7 @@ def main(n_procs, trec_dir):
 
 
 if __name__ == u'__main__':
-    n_procs = 24
+    n_procs = 10
     trec_dir = os.getenv(u"TREC_DATA", None)
     if trec_dir is None:
         trec_dir = os.path.join(os.getenv(u'HOME', u'.'), u'trec-data')
