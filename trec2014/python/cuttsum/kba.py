@@ -149,7 +149,7 @@ documents that were processed by the BBN Serif tool."""
         return u'serif'
 
     def sc_msg(self):
-        return None  
+        return sc.StreamItem_v0_3_0            
 
 
 class FilteredTS2014(_KBAStreamCorpus):
@@ -174,4 +174,4 @@ the TREC TS 2014 event queries."""
         return u'serif'
 
     def sc_msg(self):
-        return None
+        return sc.StreamItem_v0_3_0            

@@ -1,11 +1,9 @@
 import cuttsum.events
 import cuttsum.kba
-import os
-from collections import defaultdict
-import streamcorpus as sc
-import re
 from cuttsum.detector import ArticleDetector
-from pkg_resources import resource_listdir, resource_filename
+import streamcorpus as sc
+import os
+import re
 from multiprocessing import Pool
 
 domains = set([u'news', u'MAINSTREAM_NEWS'])
@@ -69,13 +67,20 @@ def find_relevant_chunks(events, corpus, n_procs, overwrite):
             for result in pool.imap(worker, jobs):
                 print "Written", result
 
-def main(n_procs, overwrite):
+def main(n_procs, overwrite, find_2013=False):
 
-    corpus = cuttsum.kba.EnglishAndUnknown2013()
-    events = [e for e in cuttsum.events.get_2013_events()]
+    if find_2013 is True:
+        corpus = cuttsum.kba.EnglishAndUnknown2013()
+        events = [e for e in cuttsum.events.get_2013_events()]
+        find_relevant_chunks(events, corpus, n_procs, overwrite)
+
+    corpus = cuttsum.kba.FilteredTS2014()
+    events = [e for e in cuttsum.events.get_2014_events()]
     find_relevant_chunks(events, corpus, n_procs, overwrite)
 
+    print "Complete!"
+
 if __name__ == u'__main__':
-    n_procs = 24
+    n_procs = 10
     overwrite = True
     main(n_procs, overwrite)
