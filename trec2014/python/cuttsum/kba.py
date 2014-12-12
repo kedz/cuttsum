@@ -24,6 +24,32 @@ class _KBAStreamCorpus(object):
                     continue
                 yield timestamp, domain, int(count), path
 
+    def chunk_paths(self, start_dt=None, end_dt=None, domain_filter=None,
+                    trec_dir=None):
+
+        if trec_dir is None:
+            trec_dir = os.getenv(u'TREC_DATA', u'.')
+
+        chunk_dir = os.path.join(trec_dir, self.fs_name())
+        chunk_dt_dirs = os.listdir(chunk_dir)
+        chunk_dt_dirs.sort()
+        for chunk_dt_dir in chunk_dt_dirs:
+                timestamp = datetime.strptime(chunk_dt_dir, '%Y-%m-%d-%H')
+                if start_dt is not None and start_dt > timestamp:
+                    continue
+                if end_dt is not None and end_dt < timestamp:
+                    continue
+
+                chunk_dt_path = os.path.join(chunk_dir, chunk_dt_dir)    
+                paths = []
+                for chunk in os.listdir(chunk_dt_path):
+                    dmn, count = chunk.split('-')[0:2]
+                    if domain_filter is not None and dmn not in domain_filter:
+                        continue
+                    paths.append(os.path.join(chunk_dt_path, chunk))
+                if len(paths) > 0:
+                    yield timestamp, paths
+
     def download_path(self, path, dest_dir):
         url = '{}{}'.format(self.aws_url_, path)
         dest = os.path.join(dest_dir, path)
@@ -83,7 +109,8 @@ documents that werer processed by LingPipe."""
             os.path.join(u'2013-data',
                 u'kba-streamcorpus-2013-v0_2_0' + \
                 U'-english-and-unknown-language.s3-paths.txt.gz')
-
+    def fs_name(self):
+        return u'2013_english_and_unknown' 
 
 class SerifOnly2014(_KBAStreamCorpus):
     """This KBA StreamCorpus contains only the English and unkown language
