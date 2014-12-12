@@ -58,11 +58,17 @@ class Event:
         self.start = start
         self.end = end
 
-    def fs_safe_title(self):
+    def fs_name(self):
         title = re.sub(r'[(){}\[\]]', r'', self.title)
         title = re.sub(r'\s+', r'_', title)
         title = title.lower()
         return title
+
+    def regex_pattern(self):
+        patt = u' '.join(self.query)
+        patt = re.sub(r'[\d(){}\[\]]', r'', patt)
+        patt = re.sub(r'\s+', r'|', patt)
+        return re.compile(patt)
 
     def __unicode__(self):
         return u"{} {}: ``{}'' {}--{} {}".format(
