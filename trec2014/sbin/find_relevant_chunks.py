@@ -54,6 +54,7 @@ def worker(args):
 
 def find_relevant_chunks(events, corpus, n_procs, overwrite):
     for e in events:
+        print e
         data_dir = make_dest_dir(e)        
 
         jobs = []
