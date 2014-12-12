@@ -1,3 +1,4 @@
+import streamcorpus as sc
 import gzip
 from datetime import datetime
 import urllib2
@@ -94,6 +95,14 @@ class _KBAStreamCorpus(object):
     def version(self):
         return self.ver_
 
+    def fs_name(self):
+        raise NotImplementedError("Subclass must implement abstract method")
+
+    def annotator(self):
+        raise NotImplementedError("Subclass must implement abstract method")
+
+    def sc_msg(self):
+        raise NotImplementedError("Subclass must implement abstract method")
 
 class EnglishAndUnknown2013(_KBAStreamCorpus):
     """This KBA StreamCorpus contains only the English and unknown langauge
@@ -109,8 +118,15 @@ documents that werer processed by LingPipe."""
             os.path.join(u'2013-data',
                 u'kba-streamcorpus-2013-v0_2_0' + \
                 U'-english-and-unknown-language.s3-paths.txt.gz')
+
     def fs_name(self):
         return u'2013_english_and_unknown' 
+
+    def annotator(self):
+        return u'lingpipe'
+
+    def sc_msg(self):
+        return sc.StreamItem_v0_2_0            
 
 class SerifOnly2014(_KBAStreamCorpus):
     """This KBA StreamCorpus contains only the English and unkown language
@@ -126,6 +142,16 @@ documents that were processed by the BBN Serif tool."""
             os.path.join(u'2014-data',
                 u'kba-streamcorpus-2014-v0_3_0-serif-only.s3-paths.txt.gz')
 
+    def fs_name(self):
+        return u'2014_serif_only' 
+
+    def annotator(self):
+        return u'serif'
+
+    def sc_msg(self):
+        return None  
+
+
 class FilteredTS2014(_KBAStreamCorpus):
     """This KBA StreamCorpus contains only the English and unkown language
 documents that were processed by the BBN Serif tool and was filtered with
@@ -140,3 +166,12 @@ the TREC TS 2014 event queries."""
         self.paths_txt_ = \
             os.path.join(u'2014-data',
                 u'streamcorpus-2014-v0_3_0-ts-filtered.s3-paths.txt.gz')
+
+    def fs_name(self):
+        return u'2014_filtered_ts' 
+
+    def annotator(self):
+        return u'serif'
+
+    def sc_msg(self):
+        return None
