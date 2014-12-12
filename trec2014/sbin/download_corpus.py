@@ -4,20 +4,25 @@ import os
 from multiprocessing import Pool
 import subprocess
 import re
+import time
 
 domains = set([u'news', u'MAINSTREAM_NEWS'])
 
 def validate_chunk_checksum(path):
     fname = os.path.split(path)[-1]
-    m = re.search(r'\w+-\d+-(.*?)-(.*?)\.sc', fname)
-    if m is None: 
-        return False
-    else:
-        check_sum = m.groups()[1]
-        sp_out = subprocess.check_output(
-            "gpg -d {} | xzcat | md5sum".format(path), shell=True)
-        actual_check_sum = sp_out.split(' ')[0]
-        return check_sum == actual_check_sum
+    check_sums = fname.split('.')[0].split('-')[2:]
+    #m = re.search(r'\w+-\d+-(.*?)-(.*?)\.sc', fname)
+    #if m is None: 
+    
+    #    return False
+
+    #else:
+    check_sum = check_sums[-1]
+        #check_sum = m.groups()[1]
+    sp_out = subprocess.check_output(
+        "gpg -d {} | xzcat | md5sum".format(path), shell=True)
+    actual_check_sum = sp_out.split(' ')[0]
+    return check_sum == actual_check_sum
 
 def worker(args):
     path, dest, corpus = args
@@ -34,22 +39,25 @@ def worker(args):
             os.remove(tgt)
     
     corpus.download_path(path, dest)
+    time.sleep(.5)
     return path
 
-def main(n_procs, trec_dir):
+def main(n_procs, trec_dir, download_2013=False):
     pool = Pool(n_procs)
-    corpus = kba.EnglishAndUnknown2013()
-    event_dir = u'2013_english_and_unknown'
-    dest = os.path.join(trec_dir, event_dir)
-    if not os.path.exists(dest):
-        os.makedirs(dest)
 
-    for event in events.get_2013_events():
-        print event 
-        jobs = [(path, dest, corpus) for ts, dmn, ct, path
-                in corpus.paths(event.start, event.end, domains)]
-        for result in pool.imap(worker, jobs):
-            print result
+    if download_2013 is True:
+        corpus = kba.EnglishAndUnknown2013()
+        event_dir = u'2013_english_and_unknown'
+        dest = os.path.join(trec_dir, event_dir)
+        if not os.path.exists(dest):
+            os.makedirs(dest)
+
+        for event in events.get_2013_events():
+            print event 
+            jobs = [(path, dest, corpus) for ts, dmn, ct, path
+                    in corpus.paths(event.start, event.end, domains)]
+            for result in pool.imap(worker, jobs):
+                print result
 
     corpus = kba.FilteredTS2014()
     event_dir = u'2014_filtered_ts'
