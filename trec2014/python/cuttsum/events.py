@@ -4,19 +4,21 @@ import re
 from pkg_resources import resource_stream
 import os
 
-def get_2013_events(by_query_id=None, by_title=None):
+def get_2013_events(by_query_ids=None, by_title=None):
     event_xml = resource_stream(
         u'cuttsum', os.path.join(
             u'2013-data', u'trec2013-ts-topics-test.xml'))
-    return get_events(event_xml, by_query_id=by_query_id, by_title=by_title)
+    return get_events(event_xml, by_query_ids=by_query_ids, by_title=by_title)
 
-def get_2014_events(by_query_id=None, by_title=None):
+def get_2014_events(by_query_ids=None, by_title=None):
     event_xml = resource_stream(
         u'cuttsum', os.path.join(
             u'2014-data', u'trec2014-ts-topics-test.xml'))
-    return get_events(event_xml, by_query_id=by_query_id, by_title=by_title)
+    return get_events(event_xml, by_query_ids=by_query_ids, by_title=by_title)
 
-def get_events(event_xml, by_query_id=None, by_title=None):
+def get_events(event_xml, by_query_ids=None, by_title=None):
+    if isinstance(by_query_ids, list):
+        by_query_ids = set(by_query_ids)
     ts_events = []
     for event, elem in ET.iterparse(event_xml, events=('end',)):
         if elem.tag == 'event':
@@ -35,8 +37,8 @@ def get_events(event_xml, by_query_id=None, by_title=None):
             start = datetime.utcfromtimestamp(int(elem.findtext('start')))
             end = datetime.utcfromtimestamp(int(elem.findtext('end')))
 
-            if by_query_id is not None:
-                if by_query_id == query_id:
+            if by_query_ids is not None:
+                if query_id in by_query_ids:
                     ts_events.append(
                         Event(query_id, title, event_type, query, start, end))
             elif by_title is not None:
