@@ -11,6 +11,7 @@ def fetch_event_chunks(event, corpus, domains=None,
     print "Fetching stream corpus chunks for"
     print "\t", event.fs_name(), "/", corpus.fs_name()
     if overwrite is True:
+        chunks = data.KBAChunkResource()
         chunks.get(event, corpus, domains=domains, 
             overwrite=overwrite, n_procs=n_procs, progress_bar=True)
     else:    
