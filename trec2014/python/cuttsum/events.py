@@ -1,5 +1,5 @@
 import xml.etree.cElementTree as ET
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 from pkg_resources import resource_stream
 import os
@@ -8,21 +8,23 @@ def get_2013_events(by_query_ids=None, by_title=None):
     event_xml = resource_stream(
         u'cuttsum', os.path.join(
             u'2013-data', u'trec2013-ts-topics-test.xml'))
-    return get_events(event_xml, by_query_ids=by_query_ids, by_title=by_title)
+    return get_events(event_xml, by_query_ids=by_query_ids, by_title=by_title,
+                      prefix='TS13.')
 
 def get_2014_events(by_query_ids=None, by_title=None):
     event_xml = resource_stream(
         u'cuttsum', os.path.join(
             u'2014-data', u'trec2014-ts-topics-test.xml'))
-    return get_events(event_xml, by_query_ids=by_query_ids, by_title=by_title)
+    return get_events(event_xml, by_query_ids=by_query_ids, by_title=by_title,
+                      prefix='TS14.')
 
-def get_events(event_xml, by_query_ids=None, by_title=None):
+def get_events(event_xml, by_query_ids=None, by_title=None, prefix=''):
     if isinstance(by_query_ids, list):
         by_query_ids = set(by_query_ids)
     ts_events = []
     for event, elem in ET.iterparse(event_xml, events=('end',)):
         if elem.tag == 'event':
-            query_id = u'TS14.{}'.format(elem.findtext('id'))
+            query_id = u'{}{}'.format(prefix, elem.findtext('id'))
             title = elem.findtext('title')    
             if isinstance(title, str):
                 title = title.decode(u'utf-8')
@@ -85,7 +87,17 @@ class Event:
         days, seconds = duration.days, duration.seconds
         hours = days * 24 + seconds // 3600
         return hours
-
+ 
+    def list_event_hours(self):
+        start_dt = self.start.replace(minute=0, second=0)
+        end_dt = self.end.replace(minute=0, second=0)
+        current_dt = start_dt
+        hours = []
+        while current_dt <= end_dt:
+            hours.append(current_dt)
+            current_dt += timedelta(hours=1)
+        return hours
+   
 def main(args):
 
 

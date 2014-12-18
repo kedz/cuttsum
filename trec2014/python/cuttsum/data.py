@@ -7,6 +7,12 @@ import socket
 import gzip
 import sys
 from multiprocessing import Pool
+from collections import defaultdict
+import streamcorpus as sc
+import marisa_trie
+import numpy as np
+import signal
+
 
 def relevant_chunks(event):
     data_dir = os.getenv(u'TREC_DATA', u'.')
@@ -23,6 +29,8 @@ def relevant_chunk_size(event):
 
 class Resource(object):
 
+    deps_met_ = {}
+    
     def check_coverage(self):
         raise NotImplementedError
 
@@ -38,28 +46,73 @@ class Resource(object):
     @classmethod
     def getdependency(self, fun):
         def wrapper(self, event, corpus, **kwargs):            
-            for dc in self.dependencies():
-                dep = dc()
-                coverage_per = dep.check_coverage(event, corpus, **kwargs)
-                if coverage_per != 1.:
-                    sys.stdout.write(
-                        u"{}: Incomplete coverage (%{:0.2f}), retrieving...\n"
-                            .format(dep, coverage_per * 100.))
-                    if dep.get(event, corpus, **kwargs) is True:
-                        sys.stdout.write('OK!\n')
-                        sys.stdout.flush()
-                    else:
-                        sys.stdout.write('FAILED!\n')
-                        sys.flush()
-                        sys.stderr.write(
-                            'Failed to retrieve necessary resource:\n')
-                        sys.stderr.write('\t{} for {} / {}'.format(
-                            dep, event.query_id, corpus.fs_name())) 
-                        sys.stderr.flush()
-                        sys.exit(1)
-
+            if self.deps_met_.get((event.fs_name(), corpus.fs_name()), False):
+                for dc in self.dependencies():
+                    dep = dc()
+                    coverage_per = dep.check_coverage(event, corpus, **kwargs)
+                    if coverage_per != 1.:
+                        sys.stdout.write(
+                            u"{}: Incomplete coverage (%{:0.2f}), "
+                            u"retrieving...\n"
+                                .format(dep, coverage_per * 100.))
+                        if dep.get(event, corpus, **kwargs) is True:
+                            sys.stdout.write('OK!\n')
+                            sys.stdout.flush()
+                        else:
+                            sys.stdout.write('FAILED!\n')
+                            sys.flush()
+                            sys.stderr.write(
+                                'Failed to retrieve necessary resource:\n')
+                            sys.stderr.write('\t{} for {} / {}'.format(
+                                dep, event.query_id, corpus.fs_name())) 
+                            sys.stderr.flush()
+                            sys.exit(1)
+            self.deps_met_[(event.fs_name(), corpus.fs_name())] = True
             return fun(self, event, corpus, **kwargs)
         return wrapper
+
+    @classmethod
+    def getsuperdependency(self, fun):
+        def wrapper(self, event, corpus, **kwargs):
+            if corpus.is_subset() is True:
+                corpus = corpus.get_superset()
+            return fun(self, event, corpus, **kwargs)
+        return wrapper
+
+    def do_work(self, worker, jobs, n_procs, progress_bar):
+        n_jobs = len(jobs)
+        if n_procs == 1:
+            for j, job in enumerate(jobs, 1):
+                if progress_bar is True:
+                    sys.stdout.write('{}: %{:0.3f} complete...\r'.format(
+                        self, j * 100. / n_jobs))
+                    sys.stdout.flush()
+                worker(job)
+                
+        else:
+            try:
+                pool = Pool(
+                    n_procs, 
+                    lambda: signal.signal(
+                        signal.SIGINT, signal.SIG_IGN))
+                for r, result in enumerate(
+                    pool.imap_unordered(worker, jobs), 1):
+                    
+                    if progress_bar is True:
+                        sys.stdout.write('{}: %{:0.3f} complete...\r'.format(
+                            self, r * 100. / n_jobs))
+                        sys.stdout.flush()
+
+            except KeyboardInterrupt:
+                print "\rCaught KeyboardInterrupt, terminating workers..."
+                pool.close()
+                sys.exit()
+
+        if progress_bar is True:
+            sys.stdout.write(' ' * 79 + '\r')
+            sys.stdout.flush()
+        return True
+
 
 
 class KBAChunkResource(Resource):
@@ -158,11 +211,7 @@ def _kbachunk_resource_worker(args):
         write_url_data(url, path, timeout=60)
     except PageNotFoundException, e:
         print e
-        #with gzip.open(path, u'w') as f:
-        #    f.write('\n')
   
-   
-    
 class UrlListResource(Resource):
     def __init__(self):
         self.dir_ = os.path.join(
@@ -172,7 +221,6 @@ class UrlListResource(Resource):
 
     def __unicode__(self):
         return u"cuttsum.data.UrlListResource"
-
 
     def check_coverage(self, event, corpus, **kwargs):
         n_hours = 0
@@ -330,4 +378,96 @@ def download_url(url, timeout):
     # For Python 2.7
         raise TimeoutException("There was an error: %r" % e)
  
+class IdfResource(Resource):
+    def __init__(self):
+        self.dir_ = os.path.join(
+            os.getenv(u'TREC_DATA', u'.'), u'idf')
+        if not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
+        
 
+    def __unicode__(self):
+        return u"cuttsum.data.IdfResource"
+
+    @Resource.getsuperdependency
+    @Resource.getdependency
+    def check_coverage(self, event, corpus, **kwargs):
+        domains = kwargs.get(u'domains', None)
+        data_dir = os.path.join(self.dir_, corpus.fs_name())
+        chunks = KBAChunkResource()
+
+        n_hours = 0
+        n_covered = 0
+        for hour in event.list_event_hours():
+            tfidf_path = os.path.join(data_dir, u"{}.idf.marisa.gz".format(
+                hour.strftime(u"%Y-%m-%d-%H")))
+            n_hours += 1
+            if os.path.exists(tfidf_path):
+                n_covered += 1
+            
+        if n_hours == 0:
+            return 0
+        else:
+            return n_covered / float(n_hours)
+
+    @Resource.getsuperdependency
+    @Resource.getdependency
+    def get(self, event, corpus, **kwargs):
+        data_dir = os.path.join(self.dir_, corpus.fs_name())
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+        domains = kwargs.get(u'domains', None)
+        chunks = KBAChunkResource()
+        
+        hour2chunks = defaultdict(list)
+        for d, c, path, url in chunks.get_chunk_info_paths_urls(
+            event, corpus):
+            if domains is None or d in domains:
+                hour = os.path.basename(os.path.dirname(path))
+                hour2chunks[hour].append(path)
+
+        overwrite = kwargs.get(u'overwrite', False)
+        jobs = []
+        for hour, paths in hour2chunks.iteritems():
+            mpath = os.path.join(data_dir, "{}.idf.marisa.gz".format(hour))
+            if overwrite is True or not os.path.exists(mpath):
+                jobs.append((mpath, paths, corpus))
+
+        n_procs = kwargs.get(u'n_procs', 1)
+        progress_bar = kwargs.get(u'progress_bar', False)
+        self.do_work(_idf_resource_worker, jobs, n_procs, progress_bar)
+
+    def dependencies(self):
+        return tuple([KBAChunkResource])
+
+def _idf_resource_worker(args):        
+
+    mpath, paths, corpus = args
+    n_docs = 0
+    counts = defaultdict(int)
+    for path in paths:
+        for si in sc.Chunk(path=path, mode='rb', 
+            message=corpus.sc_msg()):
+
+            sentences = corpus.get_sentences(si)
+            if len(sentences) == 0:
+                continue 
+
+            n_docs += 1 
+            unique_words = set()
+            for sentence in sentences:
+                for token in sentence.tokens:
+                    unique_words.add(
+                        token.token.decode(u'utf-8').lower())
+            for word in unique_words:
+                counts[word] += 1
+
+    n_docs = float(n_docs)
+    words = counts.keys() 
+
+    idfs = [tuple([np.log(n_docs / value)])
+              for value in counts.values()] 
+
+    trie = marisa_trie.RecordTrie("<d", zip(words, idfs))
+    with gzip.open(mpath, u'wb') as f:
+        trie.write(f)

@@ -17,6 +17,20 @@ class _KBAStreamCorpus(object):
     def sc_msg(self):
         raise NotImplementedError("Subclass must implement abstract method")
 
+    def is_subset(self):
+        raise NotImplementedError("Subclass must implement abstract method")
+
+    def get_superset(self):
+        raise NotImplementedError("Subclass must implement abstract method")
+
+    def get_sentences(self, si):
+        if u'serif' in si.body.sentences:
+            return si.body.sentences[u'serif']
+        elif u'lingpipe' in si.body.sentences:
+            return si.body.sentences[u'lingpipe']
+        else:
+            return []
+
 class EnglishAndUnknown2013(_KBAStreamCorpus):
     """This KBA StreamCorpus contains only the English and unknown langauge
 documents that werer processed by LingPipe."""
@@ -36,6 +50,12 @@ documents that werer processed by LingPipe."""
 
     def sc_msg(self):
         return sc.StreamItem_v0_2_0            
+
+    def is_subset(self):
+        return False
+
+    def get_superset(self):
+        return self
 
 class SerifOnly2014(_KBAStreamCorpus):
     """This KBA StreamCorpus contains only the English and unkown language
@@ -57,6 +77,11 @@ documents that were processed by the BBN Serif tool."""
     def sc_msg(self):
         return sc.StreamItem_v0_3_0            
 
+    def is_subset(self):
+        return False
+
+    def get_superset(self):
+        return self
 
 class FilteredTS2014(_KBAStreamCorpus):
     """This KBA StreamCorpus contains only the English and unkown language
@@ -78,3 +103,9 @@ the TREC TS 2014 event queries."""
 
     def sc_msg(self):
         return sc.StreamItem_v0_3_0            
+
+    def is_subset(self):
+        return True
+
+    def get_superset(self):
+        return SerifOnly2014()
