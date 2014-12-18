@@ -80,6 +80,9 @@ class Resource(object):
         return wrapper
 
     def do_work(self, worker, jobs, n_procs, progress_bar):
+        if sys.stdout.isatty() is False:
+            progress_bar = False
+
         n_jobs = len(jobs)
         if n_procs == 1:
             for j, job in enumerate(jobs, 1):
