@@ -68,5 +68,5 @@ def main(data_dir=None, n_procs=1):
             f.write('\n')
 
 if __name__ == u'__main__':
-    n_procs = 10
+    n_procs = 20
     main(data_dir=None, n_procs=n_procs)
