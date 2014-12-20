@@ -1,6 +1,6 @@
 import argparse
 import cuttsum.events
-import cuttsum.kba
+import cuttsum.corpora
 import cuttsum.data as data
 import pandas as pd
 
@@ -34,7 +34,7 @@ def print_report(args):
     results = []
 
     if args.fetch_sc2013 is True or args.fetch_all is True:
-        corpus = cuttsum.kba.EnglishAndUnknown2013()
+        corpus = cuttsum.corpora.EnglishAndUnknown2013()
         for event in cuttsum.events.get_2013_events(
             by_query_ids=args.query_ids):
             coverage_per = chunks.check_coverage(
@@ -49,7 +49,7 @@ def print_report(args):
                  u"num chunks": n_chunks})
 
     if args.fetch_sc2014_serif is True or args.fetch_all is True:
-        corpus = cuttsum.kba.SerifOnly2014()
+        corpus = cuttsum.corpora.SerifOnly2014()
         for event in cuttsum.events.get_2014_events(
             by_query_ids=args.query_ids):
             coverage_per = chunks.check_coverage(
@@ -64,7 +64,7 @@ def print_report(args):
                  u"num chunks": n_chunks})
 
     if args.fetch_sc2014_ts is True or args.fetch_all is True:
-        corpus = cuttsum.kba.FilteredTS2014()
+        corpus = cuttsum.corpora.FilteredTS2014()
         for event in cuttsum.events.get_2014_events(
             by_query_ids=args.query_ids):
             coverage_per = chunks.check_coverage(
@@ -85,7 +85,7 @@ def print_report(args):
 def fetch_all_chunks(args):
 
     if args.fetch_sc2013 is True or args.fetch_all is True:
-        corpus = cuttsum.kba.EnglishAndUnknown2013()
+        corpus = cuttsum.corpora.EnglishAndUnknown2013()
         for event in cuttsum.events.get_2013_events(
             by_query_ids=args.query_ids):
             fetch_event_chunks(
@@ -93,7 +93,7 @@ def fetch_all_chunks(args):
                 args.overwrite, args.n_procs)
 
     if args.fetch_sc2014_serif is True or args.fetch_all is True:
-        corpus = cuttsum.kba.SerifOnly2014()
+        corpus = cuttsum.corpora.SerifOnly2014()
         for event in cuttsum.events.get_2014_events(
             by_query_ids=args.query_ids):
             fetch_event_chunks(
@@ -101,7 +101,7 @@ def fetch_all_chunks(args):
                 args.overwrite, args.n_procs)
 
     if args.fetch_sc2014_ts is True or args.fetch_all is True:
-        corpus = cuttsum.kba.FilteredTS2014()
+        corpus = cuttsum.corpora.FilteredTS2014()
         for event in cuttsum.events.get_2014_events(
             by_query_ids=args.query_ids):
             fetch_event_chunks(
