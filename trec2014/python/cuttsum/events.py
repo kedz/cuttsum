@@ -90,8 +90,9 @@ class Event:
         hours = days * 24 + seconds // 3600
         return hours
  
-    def list_event_hours(self):
-        start_dt = self.start.replace(minute=0, second=0)
+    def list_event_hours(self, preroll=0):
+        start_dt = self.start.replace(minute=0, second=0) \
+            - timedelta(hours=preroll)
         end_dt = self.end.replace(minute=0, second=0)
         current_dt = start_dt
         hours = []
@@ -101,7 +102,6 @@ class Event:
         return hours
    
 def main(args):
-
 
     if args.relevance_report is True:
         import pandas as pd

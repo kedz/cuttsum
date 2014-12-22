@@ -2,11 +2,14 @@ import os
 import errno
 import re
 from datetime import datetime, timedelta
-import urllib2
+from urllib3 import PoolManager
+from gnupg import GPG
+from StringIO import StringIO
 import socket
 import gzip
 import sys
-from multiprocessing import Pool
+import multiprocessing
+import Queue
 from collections import defaultdict
 import streamcorpus as sc
 import marisa_trie
@@ -82,104 +85,123 @@ class Resource(object):
         return wrapper
 
     def do_work(self, worker, jobs, n_procs, progress_bar):
-        if sys.stdout.isatty() is False:
-            progress_bar = False
+        from .misc import ProgressBar
+        max_jobs = len(jobs)
+        job_queue = multiprocessing.Queue()
+        result_queue = multiprocessing.Queue()
 
-        n_jobs = len(jobs)
-        if n_procs == 1:
-            for j, job in enumerate(jobs, 1):
+        for job in jobs:
+            job_queue.put(job)
+
+        pool = []        
+        for i in xrange(n_procs):
+            p = multiprocessing.Process(target=worker,
+                                        args=(job_queue, result_queue))
+            p.start()
+            pool.append(p)            
+
+            pb = ProgressBar(max_jobs)
+        try:
+            for n_job in xrange(max_jobs):
+                result = result_queue.get(block=True)
                 if progress_bar is True:
-                    sys.stdout.write('{}: %{:0.3f} complete...\r'.format(
-                        self, j * 100. / n_jobs))
-                    sys.stdout.flush()
-                worker(job)
-                
-        else:
-            try:
-                pool = Pool(
-                    n_procs, 
-                    lambda: signal.signal(
-                        signal.SIGINT, signal.SIG_IGN))
-                for r, result in enumerate(
-                    pool.imap_unordered(worker, jobs), 1):
-                    
-                    if progress_bar is True:
-                        sys.stdout.write('{}: %{:0.3f} complete...\r'.format(
-                            self, r * 100. / n_jobs))
-                        sys.stdout.flush()
+                    pb.update()
 
-            except KeyboardInterrupt:
-                print "\rCaught KeyboardInterrupt, terminating workers..."
-                pool.close()
-                sys.exit()
+            for p in pool:
+                p.join()
 
-        if progress_bar is True:
-            sys.stdout.write(' ' * 79 + '\r')
-            sys.stdout.flush()
-        return True
+        except KeyboardInterrupt:
+            pb.clear()
+            print "Completing current jobs and shutting down!"
+            while not job_queue.empty():
+                job_queue.get()
+            for p in pool:
+                p.join()
+            sys.exit()
 
 
-
-class KBAChunkResource(Resource):
+class UrlListResource(Resource):
     def __init__(self):
         self.dir_ = os.path.join(
-            os.getenv(u'TREC_DATA', u'.'), u'kba-chunks')
+            os.getenv(u'TREC_DATA', u'.'), u'url-lists')
         if not os.path.exists(self.dir_):
             os.makedirs(self.dir_)
 
-    @Resource.getdependency
-    def check_coverage(self, event, corpus, domains=None, **kwargs):
-        n_chunks = 0
+    def __unicode__(self):
+        return u"cuttsum.data.UrlListResource"
+
+    def get_event_url_paths(self, event, corpus, preroll=0):
+        paths = []
+        for hour in event.list_event_hours(preroll=preroll):
+            path = os.path.join(self.dir_, corpus.fs_name(), 
+                u'{}.txt.gz'.format(hour.strftime(u'%Y-%m-%d-%H')))
+            if os.path.exists(path):
+                paths.append(path)
+        return paths
+
+    def check_coverage(self, event, corpus, **kwargs):
+        n_hours = 0
         n_covered = 0
-        for domain, count, path, url in self.get_chunk_info_paths_urls(
-            event, corpus):
-            if domains is None or domain in domains:
-                n_chunks += 1
-                if os.path.exists(path):
-                    n_covered += 1    
+        preroll = kwargs.get(u'preroll', 0)
 
-        if n_chunks == 0:
-            return 0
-        else:
-            return n_covered / float(n_chunks)
+        for hour in event.list_event_hours(preroll=preroll):
+            path = os.path.join(self.dir_, corpus.fs_name(),
+                u'{}.txt.gz'.format(hour.strftime(u'%Y-%m-%d-%H')))
+            n_hours += 1
+            if os.path.exists(path) and os.path.isfile(path):
+                n_covered += 1
+        return float(n_covered) / n_hours
 
-    @Resource.getdependency
-    def get(self, event, corpus, domains=None, **kwargs):
+    def get(self, event, corpus, overwrite=False, n_procs=1, 
+            progress_bar=True, preroll=0, **kwargs):
+
+        data_dir = os.path.join(self.dir_, corpus.fs_name())
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+        
+        hours = event.list_event_hours(preroll=preroll)
+        n_hours = len(hours)
+
         jobs = []
-        overwrite = kwargs.get(u'overwrite', False)
-        for domain, count, path, url in self.get_chunk_info_paths_urls(
-            event, corpus):
-            if domains is None or domain in domains:
-                if overwrite is True or not os.path.exists(path):
-                    jobs.append((path, url))
+        for hour in hours:
+            ulist_path = os.path.join(
+                data_dir, u'{}.txt.gz'.format(hour.strftime(u'%Y-%m-%d-%H')))
+            if overwrite is True or not os.path.exists(ulist_path):
+                jobs.append((hour, ulist_path, corpus)) 
 
-        progress_bar = kwargs.get(u'progress_bar', False)
-        n_procs = kwargs.get(u'n_procs', 1)
-        n_jobs = len(jobs)
-        if n_procs == 1:
-            for j, job in enumerate(jobs, 1):
-                if progress_bar is True:
-                    sys.stdout.write('{}: %{:0.3f} complete...\r'.format(
-                        self, j * 100. / n_jobs))
-                    sys.stdout.flush()
-                _kbachunk_resource_worker(job)
-                
-        else:
-            pool = Pool(n_procs)
-            for r, result in enumerate(pool.imap_unordered(
-                _kbachunk_resource_worker, jobs), 1):
-                if progress_bar is True:
-                    sys.stdout.write('{}: %{:0.3f} complete...\r'.format(
-                        self, r * 100. / n_jobs))
-                    sys.stdout.flush()
-
-        if progress_bar is True:
-            sys.stdout.write(' ' * 79 + '\r')
-            sys.stdout.flush()
+        self.do_work(urllist_worker_, jobs, n_procs, progress_bar)
         return True
 
     def dependencies(self):
-        return tuple([UrlListResource])
+        return tuple([])
+
+def urllist_worker_(job_queue, result_queue):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    http = PoolManager(timeout=15.0, retries=3)
+
+    while not job_queue.empty():
+        try:
+            hour, ulist_path, corpus = job_queue.get(block=False)
+            hour_str = hour.strftime(u'%Y-%m-%d-%H')
+            url = u'{}{}/index.html'.format(corpus.aws_url_, hour_str)
+
+            r = http.request('GET', url)
+            with gzip.open(ulist_path, u'w') as f:
+                for link in re.findall(r'<a href="(.*?)">', r.data):
+                    if "index.html" in link:
+                        continue
+                    f.write('{}/{}\n'.format(hour_str, link))
+
+            result_queue.put(None)
+        except Queue.Empty:
+            pass
+        
+class SCChunkResource(Resource):
+    def __init__(self):
+        self.dir_ = os.path.join(
+            os.getenv(u'TREC_DATA', u'.'), u'sc-chunks')
+        if not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
 
     def get_chunks_for_hour(self, hour, corpus):
         hour_dir = os.path.join(
@@ -191,10 +213,11 @@ class KBAChunkResource(Resource):
         else:
             return []
 
-    def get_chunk_info_paths_urls(self, event, corpus):
+    def get_chunk_info_paths_urls(self, event, corpus, preroll=0):
         data_dir = os.path.join(self.dir_, corpus.fs_name())
         data = []
-        for url_path in UrlListResource().get_event_url_paths(event, corpus):
+        for url_path in UrlListResource().get_event_url_paths(
+            event, corpus, preroll=preroll):
             with gzip.open(url_path, u'r') as f:
                 for line in f:
                     if line == '\n':
@@ -202,130 +225,73 @@ class KBAChunkResource(Resource):
                     if "index" in line:
                         continue
                     chunk = line.strip()
+                    chunk = os.path.splitext(chunk)[0]
                     path = os.path.join(data_dir, chunk)
-                    url = '{}{}'.format(corpus.aws_url_, chunk)
+                    url = '{}{}.gpg'.format(corpus.aws_url_, chunk)
                     domain, count = os.path.split(path)[-1].split('-')[0:2]
                     data.append((domain, int(count), path, url))
         return data    
 
     def __unicode__(self):
-        return u"cuttsum.data.KBAChunkResource"
-   
-def _kbachunk_resource_worker(args):
-    path, url = args
-
-    parent = os.path.dirname(path)
-    if not os.path.exists(parent):
-        try:
-            os.makedirs(parent)
-        except OSError as e: 
-            if e.errno == errno.EEXIST and os.path.isdir(parent):
-                pass
-
-    try:
-        write_url_data(url, path, timeout=60)
-    except PageNotFoundException, e:
-        print e
-  
-class UrlListResource(Resource):
-    def __init__(self):
-        self.dir_ = os.path.join(
-            os.getenv(u'TREC_DATA', u'.'), u'url-lists')
-        if not os.path.exists(self.dir_):
-            os.makedirs(self.dir_)
-
-    def __unicode__(self):
-        return u"cuttsum.data.UrlListResource"
-
-    def check_coverage(self, event, corpus, **kwargs):
-        n_hours = 0
+        return u"cuttsum.data.SCChunkResource"
+ 
+    @Resource.getdependency
+    def check_coverage(self, event, corpus, domains=None, preroll=0, **kwargs):
+        n_chunks = 0
         n_covered = 0
-        for hour in self.list_event_hours(event):
-            path = os.path.join(self.dir_, corpus.fs_name(),
-                u'{}.txt.gz'.format(hour.strftime(u'%Y-%m-%d-%H')))
-            n_hours += 1
-            if os.path.exists(path) and os.path.isfile(path):
-                n_covered += 1
-        return float(n_covered) / n_hours
+        for domain, count, path, url in self.get_chunk_info_paths_urls(
+            event, corpus, preroll=preroll):
+            if domains is None or domain in domains:
+                n_chunks += 1
+                if os.path.exists(path):
+                    n_covered += 1    
 
-    def get(self, event, corpus, 
-            overwrite=False, n_procs=1, progress_bar=False, **kwargs):
-        data_dir = os.path.join(self.dir_, corpus.fs_name())
-        if not os.path.exists(data_dir):
-            os.makedirs(data_dir)
-
-        hours = self.list_event_hours(event)
-        n_hours = len(hours)
-
-        jobs = [(hour, data_dir, corpus, overwrite) for hour in hours]
-
-        if n_procs == 1:
-            for j, job in enumerate(jobs, 1):
-                if progress_bar is True:
-                    sys.stdout.write('{}: %{:0.3f} complete...\r'.format(
-                        self, j * 100. / n_hours))
-                    sys.stdout.flush()
-                _urllist_resource_worker(job)            
-
+        if n_chunks == 0:
+            return 0
         else:
-            pool = Pool(n_procs)
-            for r, result in enumerate(
-                pool.imap_unordered(_urllist_resource_worker, jobs), 1):
-                
-                if progress_bar is True:
-                    sys.stdout.write('{}: %{:0.3f} complete...\r'.format(
-                        self, r * 100. / n_hours))
-                    sys.stdout.flush()
+            return n_covered / float(n_chunks)
 
-        if progress_bar is True:
-            sys.stdout.write(' ' * 79 + '\r')
-            sys.stdout.flush()
+    @Resource.getdependency
+    def get(self, event, corpus, domains=None, overwrite=False, 
+            n_procs=1, progress_bar=False, preroll=0, **kwargs):
+        jobs = []
+        for domain, count, path, url in self.get_chunk_info_paths_urls(
+            event, corpus, preroll=preroll):
+            if domains is None or domain in domains:
+                if overwrite is True or not os.path.exists(path):
+                    jobs.append((path, url))
+
+        self.do_work(scchunk_worker_, jobs, n_procs, progress_bar)
         return True
 
-    def list_event_hours(self, event):
-        start_dt = event.start.replace(minute=0, second=0)
-        end_dt = event.end.replace(minute=0, second=0)
-        current_dt = start_dt
-        hours = []
-        while current_dt <= end_dt:
-            hours.append(current_dt)
-            current_dt += timedelta(hours=1)
-        return hours
-
-    def get_event_url_paths(self, event, corpus):
-        data_dir = os.path.join(self.dir_, corpus.fs_name())
-        paths = []
-        for hour in self.list_event_hours(event):
-            path = os.path.join(data_dir,
-                u'{}.txt.gz'.format(hour.strftime(u'%Y-%m-%d-%H')))
-            if os.path.exists(path):
-                paths.append(path)
-        return paths
-
     def dependencies(self):
-        return ()
+        return tuple([UrlListResource])
 
-def _urllist_resource_worker(args):
-    hour, data_dir, corpus, overwrite = args
-    hour_str = hour.strftime(u'%Y-%m-%d-%H')
-    path = os.path.join(data_dir,
-        u'{}.txt.gz'.format(hour_str))
-    if overwrite is False and os.path.exists(path):
-        return
-    url = u'{}{}/index.html'.format(corpus.aws_url_, hour_str)
+def scchunk_worker_(job_queue, result_queue):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    try:
-        html = get_html_string(url, timeout=60) 
-        with gzip.open(path, u'w') as f:
-            for link in re.findall(r'<a href="(.*?)">', html):
-                if "index.html" in link:
-                    continue
-                f.write('{}/{}\n'.format(hour_str, link))
+    gpg = GPG()
+    http = PoolManager(timeout=15.0, retries=3)
 
-    except PageNotFoundException, e:
-        print e
-        with gzip.open(path, u'w') as f:
-            f.write('\n')
+    while not job_queue.empty():
+        try:
+            path, url = job_queue.get(block=False)
+            parent = os.path.dirname(path)
+            if not os.path.exists(parent):
+                try:
+                    os.makedirs(parent)
+                except OSError as e: 
+                    if e.errno == errno.EEXIST and os.path.isdir(parent):
+                        pass
+
+            r = http.request('GET', url)
+            with open(path, u'wb') as f:
+                #buf = StringIO(r.data)
+
+                f.write(str(gpg.decrypt(r.data)))
+            result_queue.put(None)
+        except Queue.Empty:
+            pass
 
 def write_url_data(url, path, timeout=None, retries=3):
     n_retries = 0
@@ -419,7 +385,7 @@ class IdfResource(Resource):
 
         n_hours = 0
         n_covered = 0
-        for hour in event.list_event_hours():
+        for hour in event.list_event_hours(preroll=5):
             tfidf_path = os.path.join(data_dir, u"{}.idf.marisa.gz".format(
                 hour.strftime(u"%Y-%m-%d-%H")))
             n_hours += 1
