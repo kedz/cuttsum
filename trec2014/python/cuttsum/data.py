@@ -46,7 +46,9 @@ class Resource(object):
     @classmethod
     def getdependency(self, fun):
         def wrapper(self, event, corpus, **kwargs):            
-            if self.deps_met_.get((event.fs_name(), corpus.fs_name()), False):
+            is_met = \
+                self.deps_met_.get((event.fs_name(), corpus.fs_name()), False)
+            if is_met is False:
                 for dc in self.dependencies():
                     dep = dc()
                     coverage_per = dep.check_coverage(event, corpus, **kwargs)
@@ -178,6 +180,16 @@ class KBAChunkResource(Resource):
 
     def dependencies(self):
         return tuple([UrlListResource])
+
+    def get_chunks_for_hour(self, hour, corpus):
+        hour_dir = os.path.join(
+            self.dir_, corpus.fs_name(), hour.strftime(u'%Y-%m-%d-%H'))
+        if os.path.exists(hour_dir):
+            chunks = [os.path.join(hour_dir, fname) for fname
+                      in os.listdir(hour_dir)]
+            return chunks
+        else:
+            return []
 
     def get_chunk_info_paths_urls(self, event, corpus):
         data_dir = os.path.join(self.dir_, corpus.fs_name())
@@ -393,6 +405,12 @@ class IdfResource(Resource):
         return u"cuttsum.data.IdfResource"
 
     @Resource.getsuperdependency
+    def get_idf_path(self, hour, corpus):
+        return os.path.join(
+            self.dir_, corpus.fs_name(), u'{}.idf.marisa.gz'.format(
+                hour.strftime(u'%Y-%m-%d-%H')))
+
+    @Resource.getsuperdependency
     @Resource.getdependency
     def check_coverage(self, event, corpus, **kwargs):
         domains = kwargs.get(u'domains', None)
@@ -474,3 +492,69 @@ def _idf_resource_worker(args):
     trie = marisa_trie.RecordTrie("<d", zip(words, idfs))
     with gzip.open(mpath, u'wb') as f:
         trie.write(f)
+
+class LMResource(Resource):
+    def __init__(self):
+        self.dir_ = os.path.join(
+            os.getenv(u'TREC_DATA', u'.'), u'lm')
+        if not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
+        
+        self.domain_lm_ = {
+            u'accident': u'accidents_3.arpa.gz', 
+            u'shooting': u'terrshoot_3.arpa.gz',
+            u'storm': u'weather_3.arpa.gz',
+            u'earthquake': u'earthquakes_3.arpa.gz',
+            u'bombing': u'terrshoot_3.arpa.gz',
+            u'riot': u'social_unrest_3.arpa.gz',
+            u'protest': u'social_unrest_3.arpa.gz',
+            u'hostage': u'terrshoot_3.arpa.gz',
+            u'impact event': u'earthquakes_3.arpa.gz',
+        }  
+        
+        self.gigaword_lm_ = u'gigaword_5.arpa.gz'
+
+        self.ports_ = {
+            u'gigaword_5.arpa.gz':      9999,
+            u'accidents_3.arpa.gz':     9998,
+            u'terrshoot_3.arpa.gz':     9997,
+            u'weather_3.arpa.gz':       9996,
+            u'earthquakes_3.arpa.gz':   9995,
+            u'social_unrest_3.arpa.gz': 9994,
+        }
+
+    def get_gigaword_port(self):
+        return self.ports_[u'gigaword_5.arpa.gz']
+
+    def get_domain_port(self, event):
+        lm = self.domain_lm_[event.type]
+        return self.ports_[lm]
+
+    def domain_path(self, event):
+        return os.path.join(self.dir_, self.domain_lm_[event.type])
+
+    def gigaword_path(self):
+        return os.path.join(self.dir_, self.gigaword_lm_)
+
+    def __unicode__(self):
+        return u"cuttsum.data.LMResource"
+
+    @Resource.getdependency
+    def check_coverage(self, event, corpus, **kwargs):
+        coverage = 0
+        if os.path.exists(self.domain_path(event)):
+            coverage += .5 
+        if os.path.exists(self.gigaword_path()):
+            coverage += .5 
+        
+        return coverage
+
+    @Resource.getdependency
+    def get(self, event, corpus, **kwargs):
+        raise NotImplementedError(
+            "I don't know how to make a language model from scratch yet")
+
+    def dependencies(self):
+        return tuple([])
+
+
