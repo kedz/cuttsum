@@ -1,5 +1,6 @@
 import os
-from setuptools import setup
+import inspect
+from setuptools import setup, Extension
 
 # Utility function to read the README file.
 # Used for the long_description.  It's nice, because now 1) we have a top level
@@ -38,6 +39,52 @@ def setup_package_data():
     return {'cuttsum': data}
 
 
+    
+
+def build_srilm_extension():
+
+    try:
+        from Cython.Build import cythonize
+        use_cython = True
+        ext = ".pyx"
+    except ImportError, e:
+        use_cython = False
+        ext = ".cpp"
+
+    sources = [os.path.join('cuttsum', 'srilm{}'.format(ext))]
+    libraries = ['oolm', 'dstruct', 'misc', 'z', 'gomp']
+
+    srilm_inc = os.getenv(u"SRILM_INC", None)
+    if srilm_inc is None:
+        print "Please set SRILM_INC to the location of SRILM" \
+            " `include' directory"
+        import sys
+        sys.exit()
+
+    srilm_lib = os.getenv(u"SRILM_LIB", None)
+    if srilm_lib is None:
+        print "Please set SRILM_LIB to the location of SRILM" \
+            " `lib' directory"
+        import sys
+        sys.exit()
+
+    extension = Extension(
+        "cuttsum.srilm",
+        sources=sources,
+        libraries=libraries,
+        extra_compile_args=["-I{}".format(srilm_inc)],
+        extra_link_args=["-L{}".format(srilm_lib)],
+        language="c++")
+
+    if use_cython is True:
+        return cythonize(extension)
+    else:
+        return extension
+
+
+
+#extension = Extension(
+
 setup(
     name = "cuttsum",
     version = "0.1.1",
@@ -54,10 +101,7 @@ setup(
 #        "Topic :: Utilities",
 #        "License :: OSI Approved :: BSD License",
     ],
-    include_package_data = True,
-    package_data = setup_package_data()
-        ## If any package contains *.txt or *.rst files, include them:
-        #'': ['*.txt', '*.rst'],
-        # And include any *.msg files found in the 'hello' package, too:
-           # }
+    include_package_data=True,
+    package_data=setup_package_data(),
+    ext_modules=build_srilm_extension(),
 )
