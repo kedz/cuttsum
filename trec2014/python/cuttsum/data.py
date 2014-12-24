@@ -2,6 +2,8 @@ import os
 import errno
 import re
 from datetime import datetime, timedelta
+import urllib3
+import json
 from urllib3 import PoolManager
 from gnupg import GPG
 from StringIO import StringIO
@@ -15,6 +17,7 @@ import streamcorpus as sc
 import marisa_trie
 import numpy as np
 import signal
+import pandas as pd
 
 
 def relevant_chunks(event):
@@ -523,4 +526,128 @@ class LMResource(Resource):
     def dependencies(self):
         return tuple([])
 
+class WikiListResource(Resource):
+    def __init__(self):
+        self.dir_ = os.path.join(
+            os.getenv(u'TREC_DATA', u'.'), u'wiki-lists')
+        if not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
+
+        self.type2cats = {
+            u'accident': ['Category:Accidents'],
+            u'impact event': ['Category:Astronomy'],
+            u'bombing': ['Category:Terrorism'],
+            u'hostage': ['Category:Terrorism'],
+            u'shooting': ['Category:Murder'],
+            u'protest': ['Category:Activism_by_type'],
+            u'riot': ['Category:Activism_by_type'],
+            u'storm': ['Category:Natural_disasters'],
+            u'earthquake': ['Category:Natural_disasters'],
+        }
+
+        self.type2fname = {
+            u'accident': 'accident.tsv.gz',
+            u'impact event': 'astronomy.tsv.gz',
+            u'bombing': 'terrorism.tsv.gz',
+            u'hostage': 'terrorism.tsv.gz',
+            u'shooting': 'murder.tsv.gz',
+            u'protest': 'social-unrest.tsv.gz',
+            u'riot': 'social-unrest.tsv.gz',
+            u'storm': 'natural-disaster.tsv.gz',
+            u'earthquake': 'natural-disaster.tsv.gz',
+        }
+
+    def __unicode__(self):
+        return u"cuttsum.data.WikiListResource"
+
+    def check_coverage(self, event, corpus, **kwargs):
+        list_path = os.path.join(self.dir_, self.type2fname[event.type])
+        print list_path
+        if os.path.exists(list_path):
+            return 1
+        else:
+            return 0
+
+    def get(self, event, corpus, max_depth=7, overwrite=False, n_procs=1, 
+            **kwargs):
+        def query(request, http):
+            request['action'] = 'query'
+            request['format'] = 'json'
+            request['continue'] = ''
+            last_continue = dict()
+            while True:
+
+                req = request.copy()
+                req.update(last_continue)
+                r = http.request_encode_url('GET', url, fields=req)
+                result = json.loads(r.data)
+               
+                #print result 
+                if 'error' in result:
+                    print result['error']
+                    break
+                if 'warnings' in result: print(result['warnings'])
+                if 'query' in result: yield result['query']
+                if 'continue' not in result: break
+                last_continue = result['continue']
+
+
+        if not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
+        list_path = os.path.join(self.dir_, self.type2fname[event.type])
+
+        good_pages = []
+
+        queue = [(cat, 0) for cat in self.type2cats[event.type]]
+        url = 'http://en.wikipedia.org/w/api.php'
+        http = urllib3.connection_from_url(url)
+        
+        visited = set()
+        depth = 0
+        while len(queue) > 0:
+
+            cat, depth = queue.pop()
+            sys.stdout.write('\r') 
+            sys.stdout.write(' ' * 80)
+            sys.stdout.write('\r') 
+            sys.stdout.write("Categories in queue: {}".format(len(queue)))
+            sys.stdout.flush()
+
+            req = {
+                'generator':'categorymembers',
+                'gcmtitle': cat
+            }
+
+            for result in query(req, http):
+                if 'pages' in result:
+                    for page in result['pages']:
+                        m = result['pages'][page]
+                        if m['ns'] == 0:
+                            title = m['title'].encode('utf-8')
+                            if title not in visited:
+                                visited.add(title)
+                                good_pages.append(
+                                    {u'depth': depth, 
+                                     u'category': cat,
+                                     u'title': title})
+                                #print depth, cat, 'Page', title
+                        elif m['ns'] == 14:
+                            title = m['title'].encode('utf-8')
+                            if depth + 1 < max_depth and title not in visited:
+                                visited.add(title)
+                                queue.append((title, depth + 1))
+
+
+        good_pages.sort(key=lambda x: x['depth'])
+        
+        df = pd.DataFrame(good_pages, columns=[u'depth', u'category', u'title'])
+        #print df
+
+        with gzip.open(list_path, 'w') as f:
+            df.to_csv(f, sep='\t')
+        #df.to_csv(list_path, compression=u'gz', sep='\t')
+        return True
+
+    def dependencies(self):
+        return tuple([])
 
