@@ -18,6 +18,8 @@ import marisa_trie
 import numpy as np
 import signal
 import pandas as pd
+from bs4 import BeautifulSoup
+import corenlp.server
 
 
 def relevant_chunks(event):
@@ -87,7 +89,8 @@ class Resource(object):
             return fun(self, event, corpus, **kwargs)
         return wrapper
 
-    def do_work(self, worker, jobs, n_procs, progress_bar):
+    def do_work(self, worker, jobs, n_procs,
+                progress_bar, result_handler=None):
         from .misc import ProgressBar
         max_jobs = len(jobs)
         job_queue = multiprocessing.Queue()
@@ -107,6 +110,8 @@ class Resource(object):
         try:
             for n_job in xrange(max_jobs):
                 result = result_queue.get(block=True)
+                if result_handler is not None:
+                    result_handler(result)
                 if progress_bar is True:
                     pb.update()
 
@@ -428,7 +433,7 @@ class IdfResource(Resource):
         self.do_work(_idf_resource_worker, jobs, n_procs, progress_bar)
 
     def dependencies(self):
-        return tuple([KBAChunkResource])
+        return tuple([SCChunkResource])
 
 def _idf_resource_worker(args):        
 
@@ -560,9 +565,12 @@ class WikiListResource(Resource):
     def __unicode__(self):
         return u"cuttsum.data.WikiListResource"
 
+    def get_list_path(self, event):
+        return os.path.join(self.dir_, self.type2fname[event.type])
+        
+
     def check_coverage(self, event, corpus, **kwargs):
-        list_path = os.path.join(self.dir_, self.type2fname[event.type])
-        print list_path
+        list_path = self.get_list_path(event)
         if os.path.exists(list_path):
             return 1
         else:
@@ -594,7 +602,7 @@ class WikiListResource(Resource):
 
         if not os.path.exists(self.dir_):
             os.makedirs(self.dir_)
-        list_path = os.path.join(self.dir_, self.type2fname[event.type])
+        list_path = self.get_list_path(event)
 
         good_pages = []
 
@@ -650,4 +658,201 @@ class WikiListResource(Resource):
 
     def dependencies(self):
         return tuple([])
+
+class DomainLMInputResource(Resource):
+    def __init__(self):
+        self.dir_ = os.path.join(
+            os.getenv(u'TREC_DATA', u'.'), u'domain-lm-input')
+        if not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
+
+        self.type2fname = {
+            u'accident': 'accident.txt.gz',
+            u'impact event': 'astronomy.txt.gz',
+            u'bombing': 'terrorism.txt.gz',
+            u'hostage': 'terrorism.txt.gz',
+            u'shooting': 'murder.txt.gz',
+            u'protest': 'social-unrest.txt.gz',
+            u'riot': 'social-unrest.txt.gz',
+            u'storm': 'natural-disaster.txt.gz',
+            u'earthquake': 'natural-disaster.txt.gz',
+        }
+
+    def get_domain_lm_input_path(self, event):
+        return os.path.join(self.dir_, self.type2fname[event.type])
+ 
+    def __unicode__(self):
+        return u"cuttsum.data.DomainLMInputResource"
+
+    @Resource.getdependency
+    def check_coverage(self, event, corpus, **kwargs):
+        path = self.get_domain_lm_input_path(event)
+        if os.path.exists(path):
+            return 1
+        else:
+            return 0
+
+    @Resource.getdependency
+    def get(self, event, corpus, overwrite=False, progress_bar=False, 
+            n_procs=1, **kwargs):
+
+        n_procs = min(n_procs, 5) # Wikipedia doesn't like us hammering them.
+
+        wikilists = WikiListResource()
+        list_path = wikilists.get_list_path(event)
+        dmn_lm_input_path = self.get_domain_lm_input_path(event)
+
+        with gzip.open(list_path, u'r') as f:
+            df = pd.io.parsers.read_csv(
+                f, sep='\t', quoting=3, header=0,
+                names=[u'depth', u'category', u'title'])
+        titles = df[u'title'].values.astype(list)
+
+        if corenlp.server.check_status() is False:
+            print "Starting Corenlp server"
+            corenlp.server.start(
+                mem="20G", threads=20,
+                annotators=['tokenize', 'ssplit', 'pos', 'lemma', 'ner'])
+      
+        with gzip.open(dmn_lm_input_path, u'w') as f: 
+            self.do_work(domainlminput_worker_, titles, n_procs, 
+                progress_bar, result_handler=domainlminput_writer_(f))
+        
+        return True
+
+    def dependencies(self):
+        return tuple([WikiListResource])
+
+def domainlminput_worker_(job_queue, result_queue):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    url = 'http://en.wikipedia.org/w/api.php'
+    http = urllib3.connection_from_url(url)
+                                  
+    page_url_tmp = 'http://en.wikipedia.org/w/index.php?title={}&oldid={}'
+
+    cnlp = corenlp.server.CoreNLPClient()
+
+    while not job_queue.empty():
+        try:
+
+            title = job_queue.get(block=False)
+        
+            fields = {'action':'query', 'format':'json', 'prop':'revisions',
+                      'titles':title, 'rvprop':'timestamp|ids',
+                      'rvstart':'20111001000000', 'rvdir':'older',
+                      'continue': ''}
+
+            r = http.request_encode_url('GET', url, fields=fields)
+            result = json.loads(r.data)
+            pid = result['query']['pages'].keys()[0]
+            revs = result['query']['pages'][pid].get('revisions', None)
+            if revs is None:
+                result_queue.put([])
+                continue
+
+            if len(revs) == 0:
+                result_queue.put([])
+                continue
+            rev = revs[0]
+            page_url = page_url_tmp.format(
+                title.replace(' ', '_'), rev['parentid'])
+            html_content = http.request_encode_url('GET', page_url).data
+            
+            soup = BeautifulSoup(html_content)
+
+            results = []
+            div = soup.find("div", {"id": "mw-content-text"})
+            if div is None:
+                result_queue.put([])
+                continue
+            for tag in div.find_all(True, recursive=False):
+                if tag.name == 'p':
+                    text = tag.get_text()
+                    text = re.sub(r'\[\d+\]', '', tag.get_text())
+                    text = cnlp.annotate(text)
+                    for sent in text:
+                        norm_tokens = []
+                        for token in sent:
+                            if token.ne != 'O':
+                                norm_tokens.append(
+                                    u'__{}__'.format(token.ne.lower()))
+                            else:
+                                norm_tokens.append(token.lem)
+                        results.append(
+                            (u' '.join(norm_tokens)).encode(u'utf-8'))
+
+            result_queue.put(results)
+        except Queue.Empty:
+            pass
+
+def domainlminput_writer_(file):
+        def wrapper(result):
+            for sent in result:
+                file.write(sent)
+                file.write('\n')
+            file.flush()
+        return wrapper
+
+class DomainLMResource(Resource):
+    def __init__(self):
+        self.dir_ = os.path.join(
+            os.getenv(u'TREC_DATA', u'.'), u'lm')
+        if not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
+        
+        self.domain_lm_ = {
+            u'accident': u'accidents_3.arpa.gz', 
+            u'shooting': u'murder_3.arpa.gz',
+            u'storm': u'natural_disaster_3.arpa.gz',
+            u'earthquake': u'natural_disaster_3.arpa.gz',
+            u'bombing': u'terrorism_3.arpa.gz',
+            u'riot': u'social_unrest_3.arpa.gz',
+            u'protest': u'social_unrest_3.arpa.gz',
+            u'hostage': u'terrorism_3.arpa.gz',
+            u'impact event': u'astronomy_3.arpa.gz',
+        }  
+        
+
+        self.ports_ = {
+            u'accidents_3.arpa.gz':     9998,
+            u'terrorism_3.arpa.gz':     9997,
+            u'natural_disaster_3.arpa.gz':       9996,
+            u'murder_3.arpa.gz':   9995,
+            u'social_unrest_3.arpa.gz': 9994,
+            u'astronomy_3.arpa.gz': 9993,
+        }
+
+    def get_port(self, event):
+        lm = self.domain_lm_[event.type]
+        return self.ports_[lm]
+
+    def get_arpa_path(self, event):
+        return os.path.join(self.dir_, self.domain_lm_[event.type])
+
+    def __unicode__(self):
+        return u"cuttsum.data.DomainLMResource"
+
+    @Resource.getdependency
+    def check_coverage(self, event, corpus, **kwargs):
+        if os.path.exists(self.get_arpa_path(event)):
+            return 1
+        else: 
+            return 0
+
+    @Resource.getdependency
+    def get(self, event, corpus, **kwargs):
+        lminputs = DomainLMInputResource()
+        lminput_path = lminputs.get_domain_lm_input_path(event)
+        arpa_path = self.get_arpa_path(event)
+
+        cmd = 'ngram-count -order 3 -kndiscount -interpolate ' \
+              '-text {} -lm {}'.format(lminput_path, arpa_path)
+
+        print cmd
+        os.system(cmd)        
+
+    def dependencies(self):
+        return tuple([DomainLMInputResource])
+
 
