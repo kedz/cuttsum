@@ -1,4 +1,6 @@
-from ..data import Resource, SCChunkResource, IdfResource, LMResource
+from ..lm import DomainLMResource, GigawordLMResource
+from ..data import Resource
+from ..sc import SCChunkResource, IdfResource
 from ..pipeline import TfIdfExtractor, LMProbExtractor
 import os
 from cuttsum.detector import ArticleDetector
@@ -6,15 +8,17 @@ import streamcorpus as sc
 import re
 import pandas as pd
 from itertools import izip
+import signal
+import Queue
 
 class ArticlesResource(Resource):
     def __init__(self):
+        Resource.__init__(self)
         self.dir_ = os.path.join(
             os.getenv(u'TREC_DATA', u'.'), u'articles')
         if not os.path.exists(self.dir_):
             os.makedirs(self.dir_)
 
-    @Resource.getdependency
     def check_coverage(self, event, corpus, **kwargs):
         data_dir = os.path.join(self.dir_, event.fs_name())
         hours = event.list_event_hours()
@@ -36,7 +40,6 @@ class ArticlesResource(Resource):
         return os.path.join(data_dir, u'{}.sc.gz'.format(
             hour.strftime(u'%Y-%m-%d-%H')))
 
-    @Resource.getdependency
     def get(self, event, corpus, **kwargs):
         data_dir = os.path.join(self.dir_, event.fs_name())
         if not os.path.exists(data_dir):
@@ -60,37 +63,51 @@ class ArticlesResource(Resource):
         self.do_work(_article_resource_worker, jobs, n_procs, progress_bar)
 
     def dependencies(self):
-        return tuple([SCChunkResource])
+        return tuple(['SCChunkResource'])
 
     def __unicode__(self):
         return u"cuttsum.pipeline.ArticlesResource"
 
-def _article_resource_worker(args):
-    opath, chunk_paths, event, corpus = args
-    artcl_detect = ArticleDetector(event)
-    patt = event.regex_pattern()
-    with sc.Chunk(path=opath, mode='wb', message=corpus.sc_msg()) as ochunk:
-        for path in chunk_paths:
-            for si in sc.Chunk(path=path, message=corpus.sc_msg()):
-                if si.body.clean_visible is None:
-                    continue
-                elif patt.search(si.body.clean_visible, re.I):
-                    if corpus.annotator() not in si.body.sentences:
-                        continue
-                    sent_idxs = artcl_detect.find_articles(
-                        si, annotator=corpus.annotator())
-                    if len(sent_idxs) > 0:
-                        rel_sents = []
-                        for sent_idx in sent_idxs:
-                            rel_sents.append(
-                                si.body.sentences[
-                                    corpus.annotator()][sent_idx])
-                        si.body.sentences[u'article-clf'] = rel_sents
-                        ochunk.add(si)
+def _article_resource_worker(job_queue, result_queue):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    while not job_queue.empty():
+        try:
+            opath, chunk_paths, event, corpus = job_queue.get(block=False)
+            artcl_detect = ArticleDetector(event)
+            patt = event.regex_pattern()
+            with sc.Chunk(path=opath, mode='wb', message=corpus.sc_msg()) as ochunk:
+                for path in chunk_paths:
+                    for si in sc.Chunk(path=path, message=corpus.sc_msg()):
+                        if si.body.clean_visible is None:
+                            continue
+                        
+                        elif patt.search(si.body.clean_visible, re.I):
+                            
+                            #if corpus.annotator() not in si.body.sentences:
+                            #    continue
+                            sentences = corpus.get_sentences(si)
+                            sent_idxs = artcl_detect.find_articles(
+                                sentences)
+                            if len(sent_idxs) > 0:
+                                rel_sents = []
+                                for sent_idx in sent_idxs:
+                                    #for token in sentences[sent_idx].tokens:
+                                    #    print token.token,
+                                    #print
+                                    rel_sents.append(sentences[sent_idx])
+                                si.body.sentences[u'article-clf'] = rel_sents
+                                ochunk.add(si)
+
+
+            result_queue.put(None)
+        except Queue.Empty:
+            pass
 
 
 class SentenceFeaturesResource(Resource):
     def __init__(self):
+        Resource.__init__(self)
         self.dir_ = os.path.join(
             os.getenv(u'TREC_DATA', u'.'), u'sentence-features')
         if not os.path.exists(self.dir_):
@@ -101,7 +118,6 @@ class SentenceFeaturesResource(Resource):
         return os.path.join(data_dir, u'{}.tsv.gz'.format(
             hour.strftime(u'%Y-%m-%d-%H')))
 
-    @Resource.getdependency
     def check_coverage(self, event, corpus, **kwargs):
         
         hours = event.list_event_hours()
@@ -117,7 +133,6 @@ class SentenceFeaturesResource(Resource):
         else:
             return n_covered / float(n_hours)
 
-    @Resource.getdependency
     def get(self, event, corpus, **kwargs):
         hours = event.list_event_hours() 
 
@@ -125,14 +140,14 @@ class SentenceFeaturesResource(Resource):
         lms = LMResource()
         articles = ArticlesResource()
         
-        lm_ext = LMProbExtractor(
-            lms.get_domain_port(event), 3, lms.get_gigaword_port(), 5)
+#        lm_ext = LMProbExtractor(
+#            lms.get_domain_port(event), 3, lms.get_gigaword_port(), 5)
                           
 
         for hour in hours:
-            articles_path = articles.get_chunk_path(event, hour)
+#            articles_path = articles.get_chunk_path(event, hour)
             print hour
-            tfidf_ext = TfIdfExtractor(idfs.get_idf_path(hour, corpus))
+#            tfidf_ext = TfIdfExtractor(idfs.get_idf_path(hour, corpus))
             
             
 #            for si in sc.Chunk(path=articles_path, message=corpus.sc_msg()):
@@ -147,7 +162,8 @@ class SentenceFeaturesResource(Resource):
 #                print df 
 
     def dependencies(self):
-        return tuple([LMResource, IdfResource, ArticlesResource])
+        return tuple(['DomainLMResource', 'IdfResource',
+                      'ArticlesResource', 'GigawordLMResource'])
 
 
     def __unicode__(self):

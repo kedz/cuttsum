@@ -26,24 +26,24 @@ class ArticleDetector:
         safe_words = u'|'.join([re.escape(word) for word in event.query])
         self.patt = re.compile(r'({})'.format(safe_words), re.I)
 
-    def find_articles(self, si, annotator=u'serif'):
+    def find_articles(self, sentences):
         indices = []
-        for arange in self.find_ranges(si, annotator):
-            if self.contains_query(si, arange, annotator):
+        for arange in self.find_ranges(sentences):
+            if self.contains_query(sentences, arange):
                 for i in arange:
-                    ntoks = len(si.body.sentences[annotator][i].tokens)
+                    ntoks = len(sentences[i].tokens)
                     if ntoks <= self.len_max_cutoff:
                         if ntoks > self.len_min_cutoff:
                             indices.append(i)
 
         return indices
 
-    def contains_query(self, si, arange, annotator):
+    def contains_query(self, sentences, arange):
         hits = {}
         for word in self.query_words:
             hits[word] = False
         for i in arange:
-            s = si.body.sentences[annotator][i]
+            s = sentences[i]
             if len(s.tokens) > self.len_max_cutoff:
                 continue
             sstr = u' '.join(t.token.decode('utf-8') for t in s.tokens)
@@ -54,11 +54,11 @@ class ArticleDetector:
                 return False
         return True
 
-    def find_ranges(self, si, annotator=u'serif'):
-
+    def find_ranges(self, sentences):
+        n_sents = len(sentences)
         data = []
-        for sent_id, sent in enumerate(si.body.sentences[annotator]):
-            feats = self._make_feature_dict(sent, sent_id)
+        for sent_id, sent in enumerate(sentences):
+            feats = self._make_feature_dict(sent, sent_id, n_sents)
             data.append(feats)
         if len(data) == 0:
             return []
@@ -89,12 +89,13 @@ class ArticleDetector:
 #
         return ranges    
 
-    def _make_feature_dict(self, sent, sent_id):
+    def _make_feature_dict(self, sent, sent_id, n_sents):
         tokens = [token.token.decode(u'utf-8') for token in sent.tokens]
         feats = {}
         for t in tokens:
             feats[t] = feats.get(t, 0) + 1
-        feats[u'__SID__'] = sent_id
+        feats[u'__SID__'] = int(sent_id)
+        feats[u'__POS__'] = float(sent_id) / float(n_sents)
         if len(tokens) >= 3:
             f = u'__LAST1_{}_{}_{}'.format(tokens[-3], tokens[-2], tokens[-1])
             feats[f] = 1
