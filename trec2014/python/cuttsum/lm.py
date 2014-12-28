@@ -98,11 +98,12 @@ class WikiListResource(Resource):
         while len(queue) > 0:
 
             cat, depth = queue.pop()
-            sys.stdout.write('\r') 
-            sys.stdout.write(' ' * 79)
-            sys.stdout.write('\r') 
-            sys.stdout.write("Categories in queue: {}".format(len(queue)))
-            sys.stdout.flush()
+            if sys.stdout.isatty():
+                sys.stdout.write('\r') 
+                sys.stdout.write(' ' * 79)
+                sys.stdout.write('\r') 
+                sys.stdout.write("Categories in queue: {}".format(len(queue)))
+                sys.stdout.flush()
 
             req = {
                 'generator':'categorymembers',
