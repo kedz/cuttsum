@@ -1,0 +1,4 @@
+export SRILM var
+export PATH=$PATH:$SIRLM/bin:$SRILM/bin/i686-m64/
+
+MAKE_PIC=yes make World
