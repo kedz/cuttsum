@@ -340,6 +340,38 @@ class DomainLMResource(Resource):
     def dependencies(self):
         return tuple(['DomainLMInputResource'])
 
+class GigawordLMInputResource(Resource):
+    """Manager of input (one sentence per line docs) 
+for gigaword language model. Because this is such a large dependency
+there is no getter for this."""
+    
+    def __init__(self):
+        Resource.__init__(self)
+        self.dir_ = os.path.join(
+            os.getenv(u'TREC_DATA', u'.'), u'gigaword-lm-input')
+        if not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
+
+    def get_lm_input_path(self, event):
+        return os.path.join(self.dir_, u'gigaword.txt.gz')
+ 
+    def __unicode__(self):
+        return u"cuttsum.lm.GigawordLMInputResource"
+
+    def check_coverage(self, event, corpus, **kwargs):
+        path = self.get_lm_input_path(event)
+        if os.path.exists(path):
+            return 1
+        else:
+            return 0
+
+    def get(self, event, corpus, **kwargs):
+        raise NotImplementedError(
+            "I don't know how to make a language model from scratch yet")
+        
+    def dependencies(self):
+        return tuple([])
+
 class GigawordLMResource(Resource):
     def __init__(self):
         Resource.__init__(self)
@@ -354,7 +386,7 @@ class GigawordLMResource(Resource):
     def get_gigaword_port(self):
         return self.ports_
 
-    def gigaword_path(self):
+    def get_arpa_path(self):
         return os.path.join(self.dir_, self.gigaword_lm_)
 
     def __unicode__(self):
@@ -362,14 +394,21 @@ class GigawordLMResource(Resource):
 
     def check_coverage(self, event, corpus, **kwargs):
         coverage = 0.0
-        if os.path.exists(self.gigaword_path()):
+        if os.path.exists(self.get_arpa_path()):
             coverage = 1.0
         
         return coverage
 
     def get(self, event, corpus, **kwargs):
-        raise NotImplementedError(
-            "I don't know how to make a language model from scratch yet")
+        lminputs = GigawordLMInputResource()
+        lminput_path = lminputs.get_lm_input_path(event)
+        arpa_path = self.get_arpa_path()
+
+        cmd = 'ngram-count -order 5 -kndiscount -interpolate ' \
+              '-text {} -lm {}'.format(lminput_path, arpa_path)
+        print cmd
+        os.system(cmd)        
 
     def dependencies(self):
-        return tuple([])
+        return tuple(['GigawordLMInputResource'])
+
