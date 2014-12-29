@@ -56,11 +56,12 @@ class ArticlesResource(Resource):
             if os.path.exists(path) and overwrite is False:
                 continue
             chunk_paths = chunks.get_chunks_for_hour(hour, corpus)
-            jobs.append((path, chunk_paths, event, corpus))
+            jobs.append((path, chunk_paths))
 
         n_procs = kwargs.get(u'n_procs', 1)
         progress_bar = kwargs.get(u'progress_bar', False)
-        self.do_work(_article_resource_worker, jobs, n_procs, progress_bar)
+        self.do_work(_article_resource_worker, jobs, n_procs, progress_bar,
+                     event=event, corpus=corpus)
 
     def dependencies(self):
         return tuple(['SCChunkResource'])
@@ -68,12 +69,13 @@ class ArticlesResource(Resource):
     def __unicode__(self):
         return u"cuttsum.pipeline.ArticlesResource"
 
-def _article_resource_worker(job_queue, result_queue):
+def _article_resource_worker(job_queue, result_queue, **kwargs):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-
+    event = kwargs.get(u'event')
+    corpus = kwargs.get(u'corpus')
     while not job_queue.empty():
         try:
-            opath, chunk_paths, event, corpus = job_queue.get(block=False)
+            opath, chunk_paths = job_queue.get(block=False)
             artcl_detect = ArticleDetector(event)
             patt = event.regex_pattern()
             with sc.Chunk(path=opath, mode='wb', message=corpus.sc_msg()) as ochunk:
@@ -136,17 +138,17 @@ class SentenceFeaturesResource(Resource):
     def get(self, event, corpus, **kwargs):
         hours = event.list_event_hours() 
 
-        idfs = IdfResource()
-        lms = LMResource()
+        #idfs = IdfResource()
+        #lms = LMResource()
         articles = ArticlesResource()
         
 #        lm_ext = LMProbExtractor(
 #            lms.get_domain_port(event), 3, lms.get_gigaword_port(), 5)
                           
 
-        for hour in hours:
+#        for hour in hours:
 #            articles_path = articles.get_chunk_path(event, hour)
-            print hour
+#            print hour
 #            tfidf_ext = TfIdfExtractor(idfs.get_idf_path(hour, corpus))
             
             
@@ -171,3 +173,4 @@ class SentenceFeaturesResource(Resource):
 
 #        if not os.path.exists(data_dir):
 #            os
+

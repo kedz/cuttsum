@@ -127,6 +127,10 @@ class WikiListResource(Resource):
                             if depth + 1 < max_depth and title not in visited:
                                 visited.add(title)
                                 queue.append((title, depth + 1))
+        if sys.stdout.isatty():
+            sys.stdout.write('\r') 
+            sys.stdout.write(' ' * 79)
+            sys.stdout.write('\r') 
 
         good_pages.sort(key=lambda x: x['depth'])
         
@@ -205,7 +209,7 @@ for each language model."""
     def dependencies(self):
         return tuple(['WikiListResource'])
 
-def domainlminput_worker_(job_queue, result_queue):
+def domainlminput_worker_(job_queue, result_queue, **kwargs):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     url = 'http://en.wikipedia.org/w/api.php'

@@ -61,19 +61,21 @@ class UrlListResource(Resource):
             ulist_path = os.path.join(
                 data_dir, u'{}.txt.gz'.format(hour.strftime(u'%Y-%m-%d-%H')))
             if overwrite is True or not os.path.exists(ulist_path):
-                jobs.append((hour, ulist_path, corpus)) 
+                jobs.append((hour, ulist_path)) 
 
-        self.do_work(urllist_worker_, jobs, n_procs, progress_bar)
+        self.do_work(urllist_worker_, jobs, n_procs, progress_bar, 
+                     corpus=corpus)
         return True
 
 
-def urllist_worker_(job_queue, result_queue):
+def urllist_worker_(job_queue, result_queue, **kwargs):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     http = urllib3.PoolManager(timeout=15.0, retries=3)
+    corpus = kwargs.get(u'corpus')
 
     while not job_queue.empty():
         try:
-            hour, ulist_path, corpus = job_queue.get(block=False)
+            hour, ulist_path = job_queue.get(block=False)
             hour_str = hour.strftime(u'%Y-%m-%d-%H')
             url = u'{}{}/index.html'.format(corpus.aws_url_, hour_str)
 
@@ -161,7 +163,7 @@ class SCChunkResource(Resource):
         return True
 
 
-def scchunk_worker_(job_queue, result_queue):
+def scchunk_worker_(job_queue, result_queue, **kwargs):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     gpg = GPG()
@@ -185,6 +187,30 @@ def scchunk_worker_(job_queue, result_queue):
         except Queue.Empty:
             pass
 
+class SuperSetUrlListResource(UrlListResource):
+    def __unicode__(self):
+        return u"cuttsum.sc.SuperSetUrlListResource"
+
+SuperSetUrlListResource.check_coverage = \
+    Resource.getsuperdependency(UrlListResource.check_coverage)
+    
+UrlListResource.get = \
+    Resource.getsuperdependency(UrlListResource.get)
+
+class SCSuperSetChunkResource(SCChunkResource):
+    def __unicode__(self):
+        return u"cuttsum.sc.SCSuperSetChunkResource"
+
+    def dependencies(self):
+        return tuple(['SuperSetUrlListResource',])
+    
+SCSuperSetChunkResource.check_coverage = \
+    Resource.getsuperdependency(SCChunkResource.check_coverage)
+    
+SCSuperSetChunkResource.get = \
+    Resource.getsuperdependency(SCChunkResource.get)
+
+
 class IdfResource(Resource):
     def __init__(self):
         Resource.__init__(self)
@@ -197,7 +223,7 @@ class IdfResource(Resource):
         return u"cuttsum.sc.IdfResource"
 
     def dependencies(self):
-        return tuple(['SCChunkResource',])
+        return tuple(['SCSuperSetChunkResource',])
 
     @Resource.getsuperdependency
     def get_idf_path(self, hour, corpus):
@@ -245,20 +271,22 @@ class IdfResource(Resource):
         for hour, paths in hour2chunks.iteritems():
             mpath = os.path.join(data_dir, "{}.idf.marisa.gz".format(hour))
             if overwrite is True or not os.path.exists(mpath):
-                jobs.append((mpath, paths, corpus))
+                jobs.append((mpath, paths))
 
         n_procs = kwargs.get(u'n_procs', 1)
         progress_bar = kwargs.get(u'progress_bar', False)
-        self.do_work(_idf_resource_worker, jobs, n_procs, progress_bar)
+        self.do_work(_idf_resource_worker, jobs,
+                     n_procs, progress_bar, corpus=corpus)
 
-def _idf_resource_worker(job_queue, result_queue):
+def _idf_resource_worker(job_queue, result_queue, **kwargs):
 
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    corpus = kwargs.get(u'corpus')
 
     while not job_queue.empty():
         try:
             
-            mpath, paths, corpus = job_queue.get(block=False)
+            mpath, paths = job_queue.get(block=False)
             n_docs = 0
             counts = defaultdict(int)
             for path in paths:

@@ -1,30 +1,10 @@
-#import os
-#import errno
-#import re
-#from datetime import datetime, timedelta
-#import json
-#from urllib3 import PoolManager
-#from gnupg import GPG
-#from StringIO import StringIO
-#import socket
-#import gzip
-#import sys
 import multiprocessing
-#from collections import defaultdict
-#import streamcorpus as sc
-#import marisa_trie
-#import numpy as np
-#import signal
-#import pandas as pd
-#from bs4 import BeautifulSoup
-#import corenlp.server
-#
-
 import cuttsum.corpora
 import cuttsum
 import pkgutil
 import inspect
 import sys
+from .misc import toposort
 
 resources_ = {}
 def get_resource_manager(resource_name):
@@ -37,6 +17,17 @@ def get_resource_managers():
         _init_resource_manager()
     return resources_.values()
 
+def get_sorted_dependencies(reverse=False):
+    data = {}
+    for resource in get_resource_managers():
+        data[resource] = set([get_resource_manager(dep)
+                              for dep in resource.dependencies()])
+
+    groups = [group for group in toposort(data)]
+    if reverse is True:
+        return reversed(groups)
+    else:
+        return groups
 
 def _init_resource_manager():
     for loader, module_name, is_pkg in pkgutil.walk_packages(
@@ -141,7 +132,7 @@ class Resource(object):
         return wrapper
 
     def do_work(self, worker, jobs, n_procs,
-                progress_bar, result_handler=None):
+                progress_bar, result_handler=None, **kwargs):
         from .misc import ProgressBar
         max_jobs = len(jobs)
         job_queue = multiprocessing.Queue()
@@ -152,8 +143,8 @@ class Resource(object):
 
         pool = []        
         for i in xrange(n_procs):
-            p = multiprocessing.Process(target=worker,
-                                        args=(job_queue, result_queue))
+            p = multiprocessing.Process(
+                target=worker, args=(job_queue, result_queue), kwargs=kwargs)
             p.start()
             pool.append(p)            
 
