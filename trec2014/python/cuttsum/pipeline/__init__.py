@@ -1,10 +1,12 @@
 from representation import SalienceFeatureSet, TfIdfExtractor, \
-    LMProbExtractor
+    LMProbExtractor, BasicFeaturesExtractor, QueryFeaturesExtractor, \
+    GeoFeaturesExtractor
 import jobs
 from component import ArticlesResource, SentenceFeaturesResource
 
 __ALL__ = [u'SalienceFeatureSet', u'TfIdfExtractor', u'LMProbExtractor', 
-           u'jobs', 
-           u'ArticlesResource', u'SentenceFeaturesResource']
+           u'jobs', u'ArticlesResource', u'SentenceFeaturesResource',
+           u'BasicFeaturesExtractor', 'QueryFeaturesExtractor',
+           u'GeoFeaturesExtractor']
 
 

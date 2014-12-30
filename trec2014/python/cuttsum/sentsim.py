@@ -148,6 +148,8 @@ class SentenceStringsResource(Resource):
         self.do_work(sentencestring_worker_, jobs, n_procs, progress_bar,
                      corpus=corpus)
 
+from .geo import get_loc_sequences
+
 def sentencestring_worker_(job_queue, result_queue, **kwargs):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
@@ -174,18 +176,24 @@ def sentencestring_worker_(job_queue, result_queue, **kwargs):
 
                     #print idx, ")", sc_string
                     doc = cnlp.annotate(sc_string)
+                    locs = get_loc_sequences(doc)
+                    if len(locs) > 0:
+                        locs_string = (u','.join(locs)).encode(u'utf-8')
+                    else:
+                        locs_string = 'nan'
                     cnlp_string = stringify_corenlp_doc(doc)
                     #print cnlp_string
                     sent_string_data.append({
                         u'stream id': si.stream_id, u'sentence id': idx,
                         u'streamcorpus': sc_string,
-                        u'corenlp': cnlp_string})
+                        u'corenlp': cnlp_string,
+                        u'locations': locs_string})
 
             if len(sent_string_data) > 0:                
                 df = pd.DataFrame(
                     sent_string_data, 
                     columns=[u'stream id', u'sentence id', 
-                             u'streamcorpus', u'corenlp'])
+                             u'streamcorpus', u'corenlp', u'locations'])
 
                 with gzip.open(tsv_path, u'w') as f:
                     df.to_csv(f, sep='\t', index=False, index_label=False)  

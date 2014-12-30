@@ -1,4 +1,5 @@
 from .data import Resource
+from .misc import stringify_corenlp_sentence
 import os
 import sys
 import pandas as pd
@@ -245,31 +246,22 @@ def domainlminput_worker_(job_queue, result_queue, **kwargs):
                 title.replace(' ', '_'), rev['parentid'])
             html_content = http.request_encode_url('GET', page_url).data
             
-            soup = BeautifulSoup(html_content)
-
             results = []
+
+            soup = BeautifulSoup(html_content)
             div = soup.find("div", {"id": "mw-content-text"})
+            
             if div is None:
                 result_queue.put([])
                 continue
+
             for tag in div.find_all(True, recursive=False):
                 if tag.name == 'p':
                     text = tag.get_text()
                     text = re.sub(r'\[\d+\]', '', tag.get_text())
                     text = cnlp.annotate(text)
                     for sent in text:
-                        norm_tokens = []
-                        for token in sent:
-                            if token.ne == 'O':
-                                words = token.lem.split(u'_')
-                                for word in words:
-                                    if word != u'':
-                                        norm_tokens.append(word.lower())
-                            else: 
-                                norm_tokens.append(
-                                    u'__{}__'.format(token.ne.lower()))
-                        results.append(
-                            (u' '.join(norm_tokens)).encode(u'utf-8'))
+                        results.append(stringify_corenlp_sentence(sent))
 
             result_queue.put(results)
         except Queue.Empty:

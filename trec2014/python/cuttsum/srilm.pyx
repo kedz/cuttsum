@@ -2,6 +2,8 @@
 from libc.stdlib cimport malloc, free
 from libc.string cimport strcpy, strlen
 import socket
+import subprocess
+import time
 
 
 cdef extern from "Boolean.h":
@@ -23,6 +25,34 @@ cdef extern from "LMClient.h":
     cdef cppclass LMClient:
         LMClient(Vocab &, const char *, unsigned int, unsigned int) except +
         double sentenceProb(const VocabString *, TextStats &)
+
+def check_status(port):
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    result = s.connect_ex(('127.0.0.1', port))
+    s.close()
+    return result == 0
+
+def start_lm(arpa_path, order, port, timeout=9999):
+    cmd = u'nohup ngram -lm {} -tolower -order {} -server-port {}'.format(
+        arpa_path, order, port)
+    cmd += u' >lm@port{}.log 2>&1 &'.format(port)
+    print cmd
+    subprocess.Popen(cmd, shell=True)
+
+    server_on = False
+    start = time.time()
+    duration = time.time() - start
+
+    while duration < timeout and server_on is False:
+        try:
+            server_on = check_status(port)
+        except socket.error, e:
+            pass
+
+        time.sleep(1)
+        duration = time.time() - start
+
 
 cdef class Client:
     cdef LMClient *lmclient
