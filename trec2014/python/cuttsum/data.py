@@ -1,5 +1,4 @@
 import multiprocessing
-import cuttsum.corpora
 import cuttsum
 import pkgutil
 import inspect
@@ -35,6 +34,8 @@ def _init_resource_manager():
         if module_name == "cuttsum.corpora":
             continue
         if module_name == "cuttsum.events":
+            continue
+        if module_name == "cuttsum.judgements":
             continue
         module = loader.find_module(module_name).load_module(module_name)
         clsmembers = inspect.getmembers(
