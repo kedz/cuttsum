@@ -10,23 +10,36 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 def setup_package_data():
-    data = [os.path.join(u'2014-data', u'trec2014-ts-topics-test.xml'),
+    """
+Set up package data -- these are mostly resources generated from TS track
+organizers."""
+
+            
+    data = [
+            # 2013 test event xml
             os.path.join(u'2013-data', u'trec2013-ts-topics-test.xml'),
-            os.path.join(u'2013-data',
-                u'kba-streamcorpus-2013-v0_2_0' + \
-                u'-english-and-unknown-language.s3-paths.txt.gz'),
-            os.path.join(u'2013-data',
-                'kba-streamcorpus-2013-v0_2_0.s3-paths.txt.gz'),
+            
+            # 2013 nugget and match data, with some query id correction
+            # by me (Chris Kedzie). 
+            os.path.join(u'2013-data', u'nuggets.tsv.gz'),
+            os.path.join(u'2013-data', u'matches.tsv.gz'),
+           
+            # 2014 test event xml
+            os.path.join(u'2014-data', u'trec2014-ts-topics-test.xml'),
+            
+            # 2014 nugget and match data, untouched by me.
             os.path.join(u'2014-data', u'nuggets.tsv.gz'),
             os.path.join(u'2014-data', u'matches.tsv.gz'),
+
+            # Pooled updates from 2014 track participants.
             os.path.join(u'2014-data', u'updates_sampled.tsv.gz'),
             os.path.join(u'2014-data', u'updates_sampled.extended.tsv.gz'),
             os.path.join(u'2014-data', u'updates_sampled.levenshtein.tsv.gz'),
-            os.path.join(u'2014-data', 
-                u'*.gz'),
-            os.path.join(u'2014-data', 
-                u'streamcorpus-2014-v0_3_0-ts-filtered.s3-paths.txt.gz'),
+            
+            # Complete set of 2014 updates from our official run submissions. 
             os.path.join(u'2014-data', u'cunlp-updates.ssv.gz'),
+
+            # Article Classifier Model.
             os.path.join(u'models'),
             os.path.join(u'models', u'article_clf.pkl'),      
             os.path.join(u'models', u'article_clf.pkl_01.npy'),
@@ -34,13 +47,10 @@ def setup_package_data():
             os.path.join(u'models', u'article_clf.pkl_03.npy'),
             os.path.join(u'models', u'article_clf.pkl_04.npy'),
             os.path.join(u'models', u'article_clf.pkl_05.npy'),
-            os.path.join(u'models', u'article_vectorizer.pkl')]
+            os.path.join(u'models', u'article_vectorizer.pkl'),]
          
     return {'cuttsum': data}
-
-
     
-
 def build_srilm_extension():
 
     try:
