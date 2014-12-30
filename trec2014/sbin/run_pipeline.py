@@ -32,7 +32,7 @@ def print_report(event, corpus, **kwargs):
                 100. * resource.check_coverage(event, corpus, **kwargs))
     print 
 
-def get_event_pipelines(
+def run_event_pipelines(
     query_ids=None, event_types=None, fetch_all=False, fetch_sc2013=False, 
     fetch_sc2014_ts=False, fetch_sc2014_serif=False, **kwargs):
 
