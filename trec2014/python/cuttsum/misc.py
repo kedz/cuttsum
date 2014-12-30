@@ -102,6 +102,21 @@ items in the preceeding sets.
         "Cyclic dependencies exist among these items:\n{}".format(
             '\n'.join(repr(x) for x in data.iteritems()))
 
+def stringify_streamcorpus_sentence(sentence):
+    return ' '.join(token.token for token in sentence.tokens)
 
+def stringify_corenlp_doc(doc):
+    return ' '.join(stringify_corenlp_sentence(sent) for sent in doc)
 
-
+def stringify_corenlp_sentence(sentence):
+    normalized_tokens = []
+    for token in sentence:
+        if token.ne == 'O':
+            words = token.lem.split(u'_')
+            for word in words:
+                if word != u'':
+                    normalized_tokens.append(word.lower())
+        else: 
+            normalized_tokens.append(
+                u'__{}__'.format(token.ne.lower()))
+    return (u' '.join(normalized_tokens)).encode(u'utf-8')
