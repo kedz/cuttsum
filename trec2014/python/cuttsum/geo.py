@@ -1,4 +1,12 @@
 import streamcorpus as sc
+from .data import Resource, get_resource_manager
+import os
+import signal
+import Queue
+import gzip
+import numpy as np
+import pandas as pd
+import marisa_trie
 
 def get_loc_sequences(doc):
     seqs = []
@@ -55,3 +63,42 @@ class GeoCacheResource(Resource):
     def dependencies(self):
         return tuple([])
 
+
+class GeoQuery(object):
+    def __init__(self, geo_cache_tsv_path):
+        self.trie_ = self.load_(geo_cache_tsv_path)
+
+    def lookup_locations(self, locations):
+        return [self.lookup_location(loc) for loc in locations]
+
+    def lookup_location(self, location):
+        if isinstance(location, str):
+            location = location.decode(u'utf-8')
+        location = location.lower()
+        r = self.trie_.get(location, None)
+        if r is not None:
+            return r[0]
+        else:
+            return None
+        
+    def compute_distances(self, pos1, pos2, r=3958.75):
+        pos1 = pos1 * np.pi / 180
+        pos2 = pos2 * np.pi / 180
+        cos_lat1 = np.cos(pos1[..., 0])
+        cos_lat2 = np.cos(pos2[..., 0])
+        cos_lat_d = np.cos(pos1[..., 0] - pos2[..., 0])
+        cos_lon_d = np.cos(pos1[..., 1] - pos2[..., 1])
+        return r * np.arccos(cos_lat_d - cos_lat1 * cos_lat2 * (1 - cos_lon_d)
+    
+
+    def load_(self, geo_cache_tsv_path):
+        geo_data = {}
+        with open(geo_cache_tsv_path, u'r') as f:
+            for line in f:
+                loc, lat, lng = line.strip().split('\t')
+                loc = loc.decode(u'utf-8').lower()
+                lat = float(lat)
+                lng = float(lng)
+                geo_data[loc] = (lat, lng)
+        trie = marisa_trie.RecordTrie("<dd", geo_data.items())
+        return trie
