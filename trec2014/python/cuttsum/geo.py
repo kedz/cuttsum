@@ -63,6 +63,110 @@ class GeoCacheResource(Resource):
     def dependencies(self):
         return tuple([])
 
+class GeoClustersResource(Resource):
+    def __init__(self):
+        Resource.__init__(self)
+        self.dir_ = os.path.join(
+            os.getenv(u'TREC_DATA', u'.'), u'geo-clusters')
+        if not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
+
+    def dependencies(self):
+        return tuple([u'SentenceStringsResource', u'GeoCacheResource',])
+
+    def __unicode__(self):
+        return u"cuttsum.pipeline.GeoClustersResource"
+
+    def get_tsv_path(self, event, hour):
+        data_dir = os.path.join(self.dir_, event.fs_name())
+        return os.path.join(data_dir, u'{}.tsv.gz'.format(
+            hour.strftime(u'%Y-%m-%d-%H')))
+
+    def check_coverage(self, event, corpus, **kwargs):
+        
+        n_hours = 0
+        n_covered = 0
+
+        strings = get_resource_manager(u'SentenceStringsResource')
+
+        for hour in event.list_event_hours(preroll=1):
+            n_hours += 1
+            if os.path.exists(self.get_tsv_path(event, hour)):
+                n_covered += 1
+
+        if n_hours == 0:
+            return 0
+        else:
+            return n_covered / float(n_hours)
+
+    def get(self, event, corpus, overwrite=False, n_procs=1, 
+            progress_bar=False, preroll=0, **kwargs):
+        strings = get_resource_manager(u'SentenceStringsResource')
+        data_dir = os.path.join(self.dir_, event.fs_name())
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+
+        jobs = []
+        for hour in event.list_event_hours(preroll=1):
+            string_tsv_path = strings.get_tsv_path(event, hour)
+            geo_tsv_path = self.get_tsv_path(event, hour)
+            if os.path.exists(string_tsv_path):
+                if overwrite is True or not os.path.exists(geo_tsv_path):
+                    jobs.append((string_tsv_path, geo_tsv_path))    
+
+        self.do_work(geo_worker_, jobs, n_procs, progress_bar,
+                     event=event, corpus=corpus)
+
+def geo_worker_(job_queue, result_queue, **kwargs):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+ 
+    geocache = get_resource_manager(u'GeoCacheResource')
+    geoquery = GeoQuery(geocache.get_tsv_path())
+    event = kwargs.get(u'event')
+
+    while not job_queue.empty():
+        try:
+            string_tsv_path, geo_tsv_path = \
+                job_queue.get(block=False)
+
+            with gzip.open(string_tsv_path, u'r') as f:
+                string_df = pd.io.parsers.read_csv(
+                    f, sep='\t', quoting=3, header=0)
+
+            loc_strings = [loc_string for loc_string 
+                           in string_df[u'locations'].tolist()
+                           if not isinstance(loc_string, float)]
+
+            coords = []
+            
+            for loc_string in loc_strings:
+                for location in loc_string.split(','):
+                    coord = geoquery.lookup_location(location)
+                    if coord is not None:
+                        coords.append(coord)
+
+            centers = set() 
+            if len(coords) > 0:
+                coords = np.array(coords)
+                D = -geoquery.compute_distances(coords[:,None], coords)
+                ap = AffinityPropagation(affinity=u'precomputed')
+                Y = ap.fit_predict(D)     
+               
+                for center in ap.cluster_centers_indices_:
+                    centers.add((coords[center][0], coords[center][1]))
+            
+                centers = [{u'lat': lat, u'lng': lng} for lat, lng in centers]
+                centers_df = pd.DataFrame(centers, columns=[u'lat', u'lng'])
+                
+                with gzip.open(geo_tsv_path, u'w') as f:
+                    centers_df.to_csv(f, sep='\t', index=False, 
+                                      index_label=False, na_rep='nan')  
+
+            result_queue.put(None)
+        except Queue.Empty:
+            pass
+
+    return True
 
 class GeoQuery(object):
     def __init__(self, geo_cache_tsv_path):
