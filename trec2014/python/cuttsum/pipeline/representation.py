@@ -6,6 +6,9 @@ from nltk.tokenize import RegexpTokenizer
 from cuttsum.srilm import Client
 from itertools import izip
 import string
+from ..geo import GeoQuery
+import numpy as np
+import pandas as pd
 
 class SalienceFeatureSet(object):
     def __init__(self, features=None):
@@ -296,7 +299,104 @@ class LMProbExtractor(object):
 
 
 class QueryFeaturesExtractor(object):
-    pass
+    def __init__(self, event):
+        self.event_query_ = event.query
+        self.query_size_ = float(len(event.query))
+        self.features = [u'QUERY_FEATS: query term coverage',
+                         u'QUERY_FEATS: total query term matches']
+    def process_streamcorpus_strings(self, strings):
+        return [self.process_streamcorpus_string(string)
+                for string in strings]
+
+    def process_streamcorpus_string(self, string):
+        queries_covered = 0
+        total_covered = 0
+        for query in self.event_query_:
+            hits = re.findall(query, string, re.I)
+            if len(hits) > 0:
+                queries_covered += 1
+                total_covered += len(hits)
+        qt_coverage = queries_covered / self.query_size_
+        return {u'QUERY_FEATS: query term coverage': qt_coverage,
+                u'QUERY_FEATS: total query term matches': total_covered}
+
 
 class GeoFeaturesExtractor(object):
-    pass
+    def __init__(self, geo_cache_tsv_path, cluster_paths):
+        self.gq_ = GeoQuery(geo_cache_tsv_path)
+        self.hourly_clusters_ = self.load_cluster_paths_(cluster_paths)
+        self.features = [u'GEO_FEATS: median distance to cluster',] \
+            + [u'GEO_FEATS: median dist to clust_tm{}'.format(t)
+               for t in xrange(len(cluster_paths))] \
+            + [u'GEO_FEATS: first loc min dist to clust_tm{}'.format(t)
+               for t in range(len(cluster_paths))]
+ 
+    def process_geo_strings(self, strings):
+        first_loc = None 
+        counts = {}
+        str2ll = {}
+        
+        locations = []
+        for string in strings:
+            if isinstance(string, float):
+                locations.append(list())
+            else:
+                slocs = list()
+                for loc in string.split(','):
+                    ll = self.gq_.lookup_location(loc)
+                    if ll is None:
+                        continue
+                    if first_loc is None:
+                        first_loc = np.array(ll)
+                    counts[loc] = counts.get(loc, 0) + 1
+                    str2ll[loc] = ll
+                    slocs.append(ll)
+                locations.append(slocs)
+
+        loc_counts = counts.items()
+        loc_counts.sort(key=lambda x: x[1], reverse=True)
+
+        lls = np.array([str2ll[loc] for loc, count in loc_counts])
+
+        feats = {}
+        for t, clusters in enumerate(self.hourly_clusters_):
+            if clusters is None or len(lls) == 0:
+                label = u'GEO_FEATS: median dist to clust_tm{}'.format(
+                    t)
+                feats[label] = float('nan')
+                label = \
+                    u'GEO_FEATS: first loc min dist to clust_tm{}'.format(t)
+                feats[label] = float('nan')
+            else:
+                D = self.gq_.compute_distances(lls[:,None], clusters)
+                label = u'GEO_FEATS: median dist to clust_tm{}'.format(
+                    t)
+                feats[label] = \
+                    np.min(np.median(D, axis=0))
+                
+                d = self.gq_.compute_distances(first_loc, clusters)
+                label = \
+                    u'GEO_FEATS: first loc min dist to clust_tm{}'.format(t)
+                feats[label] = \
+                    np.min(d)
+
+        feats = [feats] * len(strings)
+        for i, locs in enumerate(locations):
+            if len(locs) > 0:
+                feats[i][u'GEO_FEATS: contains loc str'] = 1
+            else:
+                feats[i][u'GEO_FEATS: contains loc str'] = 0
+        return feats
+
+    def load_cluster_paths_(self, cluster_paths):
+        clusters = []
+        for path in cluster_paths:
+            if os.path.exists(path):
+                with gzip.open(path, u'r') as f:
+                    clusters_df = pd.io.parsers.read_csv(
+                        f, sep='\t', quoting=3, header=0)
+                clusters.append(clusters_df.as_matrix())
+                
+            else:
+                clusters.append(None)
+        return clusters
