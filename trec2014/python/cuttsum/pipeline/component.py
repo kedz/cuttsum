@@ -142,7 +142,7 @@ class SentenceFeaturesResource(Resource):
         strings = get_resource_manager(u'SentenceStringsResource')
 
         for hour in event.list_event_hours():
-            if os.path.join(strings.get_tsv_path(event, hour)):
+            if os.path.exists(strings.get_tsv_path(event, hour)):
                 n_hours += 1
                 if os.path.exists(self.get_tsv_path(event, hour)):
                     n_covered += 1
