@@ -33,30 +33,37 @@ def print_report(event, corpus, **kwargs):
     print 
 
 def run_event_pipelines(
+    active_resources=None,
     query_ids=None, event_types=None, fetch_all=False, fetch_sc2013=False, 
     fetch_sc2014_ts=False, fetch_sc2014_serif=False, **kwargs):
 
-        if fetch_sc2013 is True or fetch_all is True:
-            corpus = cuttsum.corpora.EnglishAndUnknown2013()
-            for event in cuttsum.events.get_2013_events(
-                by_query_ids=query_ids, by_event_types=event_types):
+    if active_resources is None:
+        active_resources = set(cuttsum.data.get_resource_managers())
+    else:
+        active_resources = set([cuttsum.data.get_resource_manager(rstring)
+                                for rstring in active_resources])
+ 
+    if fetch_sc2013 is True or fetch_all is True:
+        corpus = cuttsum.corpora.EnglishAndUnknown2013()
+        for event in cuttsum.events.get_2013_events(
+            by_query_ids=query_ids, by_event_types=event_types):
 
-                run_pipeline(event, corpus, **kwargs)
+            run_pipeline(event, corpus, active_resources, **kwargs)
 
-        if fetch_sc2014_ts is True or fetch_all is True:
-            corpus = cuttsum.corpora.FilteredTS2014()
-            for event in cuttsum.events.get_2014_events(
-                by_query_ids=query_ids, by_event_types=event_types):
+    if fetch_sc2014_ts is True or fetch_all is True:
+        corpus = cuttsum.corpora.FilteredTS2014()
+        for event in cuttsum.events.get_2014_events(
+            by_query_ids=query_ids, by_event_types=event_types):
 
-                run_pipeline(event, corpus, **kwargs)
+            run_pipeline(event, corpus, active_resources, **kwargs)
 
-def run_pipeline(event, corpus, **kwargs):
+def run_pipeline(event, corpus, active_resources, **kwargs):
     print event.query_id, event.fs_name(), "/", corpus.fs_name()
     for group in cuttsum.data.get_sorted_dependencies(reverse=False):
         for resource in group:
             coverage = resource.check_coverage(event, corpus, **kwargs)
             print "    {:50s} : {:7.3f} %".format(resource, 100. * coverage)
-            if coverage != 1:
+            if resource in active_resources and coverage != 1:
                 resource.get(event, corpus, **kwargs)
     print 
 
@@ -240,6 +247,10 @@ if __name__ == u'__main__':
                         type=set,
                         default=set(['news', 'MAINSTREAM_NEWS']), 
                         required=False)
+
+    parser.add_argument(u'--run-only', nargs=u'+', dest=u'active_resources',
+                        help=u'Run only the listed components.',
+                        default=None, required=False)
 
     parser.add_argument(u'-p', u'--n-procs', type=int,
                         help=u'Number of processes to run',
