@@ -220,6 +220,14 @@ def domainlminput_worker_(job_queue, result_queue, **kwargs):
 
     cnlp = corenlp.server.CoreNLPClient()
 
+    def get_longest_word_length(sent):
+        max_length = 0
+        for word in sent:
+            wl = len(word.lem)
+            if wl > max_length:
+                max_length = wl
+        return max_length
+
     while not job_queue.empty():
         try:
 
@@ -261,7 +269,8 @@ def domainlminput_worker_(job_queue, result_queue, **kwargs):
                     text = re.sub(r'\[\d+\]', '', tag.get_text())
                     text = cnlp.annotate(text)
                     for sent in text:
-                        results.append(stringify_corenlp_sentence(sent))
+                        if get_longest_word_length(sent) < 100:
+                            results.append(stringify_corenlp_sentence(sent))
 
             result_queue.put(results)
         except Queue.Empty:
@@ -270,6 +279,9 @@ def domainlminput_worker_(job_queue, result_queue, **kwargs):
 def domainlminput_writer_(file):
         def wrapper(result):
             for sent in result:
+
+              
+
                 file.write(sent)
                 file.write('\n')
             file.flush()
