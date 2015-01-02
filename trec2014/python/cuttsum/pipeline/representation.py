@@ -9,6 +9,7 @@ import string
 from ..geo import GeoQuery
 import numpy as np
 import pandas as pd
+from nltk.corpus import wordnet as wn
 
 class SalienceFeatureSet(object):
     def __init__(self, features=None):
@@ -301,25 +302,66 @@ class LMProbExtractor(object):
 class QueryFeaturesExtractor(object):
     def __init__(self, event):
         self.event_query_ = event.query
+
+        self.synonyms_ = []        
+        self.hypernyms_ = []        
+        self.hyponyms_ = []        
+        for synset in wn.synsets(event.type):
+            synonyms = \
+                [lemma.name().lower().replace(u'_', u' ').encode(u'utf-8')
+                 for lemma in synset.lemmas()]
+            self.synonyms_.extend(synonyms)
+
+            hypernyms = \
+                [lemma.name().lower().replace(u'_', u' ').encode(u'utf-8')
+                 for synset in synset.hypernyms()
+                 for lemma in synset.lemmas()]
+            self.hypernyms_.extend(hypernyms)
+
+            hyponyms = \
+                [lemma.name().lower().replace(u'_', u' ').encode(u'utf-8')
+                 for synset in synset.hyponyms()
+                 for lemma in synset.lemmas()]
+            self.hyponyms_.extend(hyponyms)
+            
         self.query_size_ = float(len(event.query))
-        self.features = [u'QUERY_FEATS: query term coverage',
-                         u'QUERY_FEATS: total query term matches']
+        self.features = [u'QUERY_FEATS: query coverage',
+                         u'QUERY_FEATS: total query matches',
+                         u'QUERY_FEATS: synonyms coverage',
+                         u'QUERY_FEATS: total synonyms matches',
+                         u'QUERY_FEATS: hypernyms coverage',
+                         u'QUERY_FEATS: total hypernyms matches',
+                         u'QUERY_FEATS: hyponyms coverage',
+                         u'QUERY_FEATS: total hyponyms matches',]
+
     def process_streamcorpus_strings(self, strings):
         return [self.process_streamcorpus_string(string)
                 for string in strings]
 
     def process_streamcorpus_string(self, string):
+        query_feats = self.search_(string, self.event_query_, 'query')
+        syn_feats = self.search_(string, self.synonyms_  , 'synonyms')
+        hyper_feats = self.search_(string, self.hypernyms_  , 'hypernyms')
+        hypo_feats = self.search_(string, self.hyponyms_  , 'hyponyms')
+        query_feats.update(syn_feats.iteritems())
+        query_feats.update(hyper_feats.iteritems())
+        query_feats.update(hypo_feats.iteritems())
+        return query_feats
+
+    def search_(self, string, queries, feature_name):
+
         queries_covered = 0
         total_covered = 0
-        for query in self.event_query_:
+        for query in queries:
             hits = re.findall(query, string, re.I)
             if len(hits) > 0:
                 queries_covered += 1
                 total_covered += len(hits)
-        qt_coverage = queries_covered / self.query_size_
-        return {u'QUERY_FEATS: query term coverage': qt_coverage,
-                u'QUERY_FEATS: total query term matches': total_covered}
+        qt_coverage = queries_covered / float(len(queries))
 
+        return {u'QUERY_FEATS: {} coverage'.format(feature_name): qt_coverage,
+                u'QUERY_FEATS: total {} matches'.format(feature_name): \
+                    total_covered}
 
 class GeoFeaturesExtractor(object):
     def __init__(self, geo_cache_tsv_path, cluster_paths):
