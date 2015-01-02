@@ -49,7 +49,7 @@ class GeoCacheResource(Resource):
         return os.path.join(self.dir_, self.cache_fname_)
 
     def __unicode__(self):
-        return u"cuttsum.lm.GeoCacheResource"
+        return u"cuttsum.geo.GeoCacheResource"
 
     def check_coverage(self, event, corpus, **kwargs):
         coverage = 0.0
@@ -76,7 +76,7 @@ class GeoClustersResource(Resource):
         return tuple([u'SentenceStringsResource', u'GeoCacheResource',])
 
     def __unicode__(self):
-        return u"cuttsum.pipeline.GeoClustersResource"
+        return u"cuttsum.geo.GeoClustersResource"
 
     def get_tsv_path(self, event, hour):
         data_dir = os.path.join(self.dir_, event.fs_name())
