@@ -1,7 +1,10 @@
 from ..lm import DomainLMResource, GigawordLMResource
 from ..data import Resource, get_resource_manager
 from ..sc import SCChunkResource, IdfResource
-from ..pipeline import TfIdfExtractor, LMProbExtractor, BasicFeaturesExtractor
+from ..pipeline import (
+    TfIdfExtractor, LMProbExtractor, BasicFeaturesExtractor,
+    QueryFeaturesExtractor, GeoFeaturesExtractor
+)
 import os
 from cuttsum.detector import ArticleDetector
 import streamcorpus as sc
@@ -121,7 +124,7 @@ class SentenceFeaturesResource(Resource):
     def dependencies(self):
         return tuple([u'DomainLMResource', u'IdfResource',
                       u'ArticlesResource', u'GigawordLMResource',
-                      u'SentenceStringsResource',])
+                      u'SentenceStringsResource', u'GeoClustersResource'])
 
     def __unicode__(self):
         return u"cuttsum.pipeline.SentenceFeaturesResource"
@@ -192,6 +195,10 @@ def sentencefeature_worker_(job_queue, result_queue, **kwargs):
 
     basic_ext = BasicFeaturesExtractor()
 
+    geocache = get_resource_manager(u'GeoCacheResource')
+    geocluster = get_resource_manager(u'GeoClustersResource')
+    query_ext = QueryFeaturesExtractor(event)
+
     domainlm = get_resource_manager(u'DomainLMResource')
     domainlm_port = domainlm.get_port(event)
     gigawordlm = get_resource_manager(u'GigawordLMResource')
@@ -202,6 +209,9 @@ def sentencefeature_worker_(job_queue, result_queue, **kwargs):
     def get_idf_paths(hour):
         return [idfs.get_idf_path(hour - timedelta(hours=i), corpus)
                 for i in range(preroll)]
+    def get_geo_cluster_paths(hour):
+        return [geocluster.get_tsv_path(event, hour),
+                geocluster.get_tsv_path(event, hour - timedelta(hours=1))]
 
     while not job_queue.empty():
         try:
@@ -210,6 +220,10 @@ def sentencefeature_worker_(job_queue, result_queue, **kwargs):
 
             idf_paths = get_idf_paths(hour)
             tfidf_ext = TfIdfExtractor(idf_paths[0], idf_paths[1:])
+
+            geo_ext = GeoFeaturesExtractor(
+                geocache.get_tsv_path(),
+                get_geo_cluster_paths(hour))
 
             with gzip.open(string_tsv_path, u'r') as f:
                 string_df = pd.io.parsers.read_csv(
@@ -220,7 +234,11 @@ def sentencefeature_worker_(job_queue, result_queue, **kwargs):
                 #for index, sentence in article.iterrows():
                 cnlp_strings = article[u'corenlp'].tolist()
                 sc_strings = article[u'streamcorpus'].tolist()
-                                        
+                geo_strings = article[u'locations'].tolist()
+                query_feats = query_ext.process_streamcorpus_strings(
+                    sc_strings)
+                geo_feats = geo_ext.process_geo_strings(geo_strings)
+
                 tfidf_feats = tfidf_ext.process_streamcorpus_strings(
                     sc_strings)
                 lm_feats = lm_ext.process_corenlp_strings(cnlp_strings)
@@ -233,9 +251,12 @@ def sentencefeature_worker_(job_queue, result_queue, **kwargs):
                     feature_map.update(basic_feats[index].iteritems())
                     feature_map.update(lm_feats[index].iteritems())
                     feature_map.update(tfidf_feats[index].iteritems())
+                    feature_map.update(query_feats[index].iteritems())
+                    feature_map.update(geo_feats[index].iteritems())
                     feature_maps.append(feature_map)
             columns = [u'stream id', u'sentence id'] \
-                + basic_ext.features + lm_ext.features \
+                + basic_ext.features + query_ext.features \
+                + lm_ext.features + geo_ext.features \
                 + tfidf_ext.features
             df = pd.DataFrame(feature_maps, columns=columns)
 
@@ -243,88 +264,8 @@ def sentencefeature_worker_(job_queue, result_queue, **kwargs):
                 df.to_csv(f, sep='\t', index=False, index_label=False, 
                           na_rep='nan')  
 
-
-#                    print tfidf_feats
-#            for _, sentence in string_df.iterrows():
-#                lm_feats = lm_ext.process_corenlp_string(sentence[u'corenlp'])
-
-
-
-
-
-#                print sentence[u'corenlp']
-#                print lm_feats            
-
-#            sentence_sim_data = []
-#            for (ii, lvec_row), (_, strings_row) in izip(
-#                lvec_df.iterrows(), strings_df.iterrows()):
-#                assert lvec_row[u'stream id'] == strings_row[u'stream id']
-#                assert lvec_row[u'sentence id'] == strings_row[u'sentence id']
-#
-#                sentence_sim_dict = {nugget_id_list[nugget_idx]: nugget_sim
-#                                     for nugget_idx, nugget_sim
-#                                     in enumerate(S[:, ii])}
-#                    
-#                nugget_ids = check_assessor_matches(
-#                    lvec_row[u'stream id'], lvec_row[u'sentence id'])
-#
-#                sentence_sim_dict.update(nugget_ids.items())
-#                sentence_sim_dict[u'stream id'] = lvec_row[u'stream id']
-#                sentence_sim_dict[u'sentence id'] = lvec_row[u'sentence id']
-#                sentence_sim_data.append(sentence_sim_dict)
-#
-#                ### Need to remove this when I confirm 2013 matches are good
-#                writeme = "/local/nlp/kedzie/check_matches/" + \
-#                    event.fs_name() + "." + os.path.basename(lvec_tsv_path)
-#                if len(nugget_ids) > 0:
-#                    with gzip.open(writeme, u'w') as f:
-#                        f.write(strings_row[u'streamcorpus'] + '\n')
-#                        for nugget_id in nugget_ids:
-#                            nugget_texts = nuggets[ \
-#                                nuggets['nugget id'].str.match(
-#                                    nugget_id)]['text'].tolist()
-#                            for text in nugget_texts:    
-#                                f.write("\t" + text + '\n')
-# 
             result_queue.put(None)
         except Queue.Empty:
             pass
 
     return True
-#                n_hours += 1
-#                if os.path.exists(self.get_tsv_path(event, hour)):
-#                    n_covered += 1
-#
-#
-#        hours = event.list_event_hours() 
-
-
-        #idfs = IdfResource()
-        #lms = LMResource()
-#        articles = ArticlesResource()
-        
-#        lm_ext = LMProbExtractor(
-#            lms.get_domain_port(event), 3, lms.get_gigaword_port(), 5)
-                          
-
-#        for hour in hours:
-#            articles_path = articles.get_chunk_path(event, hour)
-#            print hour
-#            tfidf_ext = TfIdfExtractor(idfs.get_idf_path(hour, corpus))
-            
-            
-#            for si in sc.Chunk(path=articles_path, message=corpus.sc_msg()):
-#                
-#                freq_features = tfidf_ext.process_article(si, corpus)
-#                lm_features = lm_ext.process_article(si)
-#
-#                features = []
-#                for m1, m2 in izip(freq_features, lm_features):
-#                    features.append(dict(m1.items() + m2.items()))
-#                df = pd.DataFrame(features)    
-#                print df 
-
-
-#        if not os.path.exists(data_dir):
-#            os
-
