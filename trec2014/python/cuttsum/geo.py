@@ -7,6 +7,7 @@ import gzip
 import numpy as np
 import pandas as pd
 import marisa_trie
+from sklearn.cluster import AffinityPropagation
 
 def get_loc_sequences(doc):
     seqs = []
@@ -192,8 +193,7 @@ class GeoQuery(object):
         cos_lat2 = np.cos(pos2[..., 0])
         cos_lat_d = np.cos(pos1[..., 0] - pos2[..., 0])
         cos_lon_d = np.cos(pos1[..., 1] - pos2[..., 1])
-        return r * np.arccos(cos_lat_d - cos_lat1 * cos_lat2 * (1 - cos_lon_d)
-    
+        return r * np.arccos(cos_lat_d - cos_lat1 * cos_lat2 * (1 - cos_lon_d))
 
     def load_(self, geo_cache_tsv_path):
         geo_data = {}
