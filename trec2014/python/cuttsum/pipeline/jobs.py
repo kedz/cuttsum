@@ -1,6 +1,7 @@
 import cuttsum
 import random
 from .representation import SalienceFeatureSet
+from .salience import SalienceModels
 
 def feature_ablation_jobs(key, per_train=.6, random_seed=42):
     def desc(train, test, features):
@@ -141,3 +142,52 @@ class PipelineJob(object):
         return u'\n'.join(strings)
 
 
+    def start(self, **kwargs):
+        for event, corpus in self.training_data:
+            print event.fs_name(), corpus.fs_name()
+            has_all_resources = self.check_resource_pipeline(
+                event, corpus, **kwargs)
+            if not has_all_resources:
+                self.run_resource_pipeline(event, corpus, **kwargs)
+            
+            print  "+  resource dependency checks met!"
+            
+            has_all_models = self.check_model_pipeline(
+                event, corpus, self.feature_set, **kwargs)
+            if not has_all_models:
+                self.train_models(event, corpus, self.feature_set, **kwargs)
+
+            print  "+  model dependency checks met!"
+            import sys
+            sys.exit()
+
+    def check_resource_pipeline(self, event, corpus, **kwargs):
+        sfeats = \
+            cuttsum.data.get_resource_manager(u'SentenceFeaturesResource')
+        nsims = \
+            cuttsum.data.get_resource_manager(u'NuggetSimilaritiesResource')
+        sf_satisfied = sfeats.check_coverage(event, corpus, **kwargs) == 1.0
+        ns_satisfied = nsims.check_coverage(event, corpus, **kwargs) == 1.0
+        return sf_satisfied and ns_satisfied
+            
+    def run_resource_pipeline(self, event, corpus, **kwargs):
+        for group in cuttsum.data.get_sorted_dependencies(reverse=False):
+            for resource in group:
+                coverage = resource.check_coverage(event, corpus, **kwargs)
+                print "    {:50s} : {:7.3f} %".format(resource, 100. * coverage)
+                if coverage != 1:
+                    resource.get(event, corpus, **kwargs)
+        print 
+        if not self.check_resource_pipeline(event, corpus, **kwargs):
+            raise Exception("Resource pipeline failed!") 
+
+    def check_model_pipeline(self, event, corpus, feature_set, **kwargs):
+        sm = SalienceModels()
+        coverage = sm.check_coverage(event, corpus, feature_set, **kwargs) 
+        return coverage == 1
+    
+    def train_models(event, corpus, feature_set, **kwargs):
+        sm = SalienceModels()
+        sm.train_models(event, corpus, feature_set, **kwargs) 
+        if not sm.check_model_pipeline(event, corpus, feature_set, **kwargs):
+            raise Exception("Model pipeline failed!") 

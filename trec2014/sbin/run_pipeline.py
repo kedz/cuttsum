@@ -205,10 +205,51 @@ def print_event_info(query_ids=None, event_types=None, **kwargs):
             len(event.list_event_hours()))
         print "query     :", event.query
         print  
-             
-def main(report=False, event_info=False, run=False, 
-         dependency_graph=False, **kwargs):
 
+def run_summarizer_jobs(**kwargs):
+    import cuttsum.pipeline.jobs as jobs
+    from cuttsum.pipeline.salience import SalienceModels
+
+    for job in jobs.feature_ablation_jobs(u'feature-ablation'):
+        job.start()
+
+
+        import sys
+        sys.exit()
+        sm = SalienceModel()
+        print job
+        for event, corpus in job.testing_data:
+            if event.fs_name() != '2012_buenos_aires_rail_disaster':
+                continue
+            print "fetching resources..."
+            run_pipeline(
+                event, corpus, 
+                set(cuttsum.data.get_resource_managers()), **kwargs)
+
+            sentence_features = \
+                cuttsum.data.get_resource_manager(u'SentenceFeaturesResource')
+            nugget_similarities = \
+                cuttsum.data.get_resource_manager(
+                    u'NuggetSimilaritiesResource')
+            assert sentence_features.check_coverage(event, corpus) == 1.0
+            assert nugget_similarities.check_coverage(event, corpus) == 1.0
+            print  "dependency checks met!"
+
+            fs = job.feature_set
+            if sm.check_coverage(event, corpus, fs, **kwargs) != 1:
+                sm.get(event, corpus, fs, **kwargs)
+
+        import sys
+        sys.exit()
+
+             
+def main(run_summarizer=False, report=False, event_info=False, run=False, 
+         dependency_graph=False, **kwargs):
+    if run_summarizer:
+        del kwargs[u'active_resources']
+        run_summarizer_jobs(**kwargs)
+        import sys
+        sys.exit()
     if dependency_graph:
         make_dependency_graph(**kwargs)
     if event_info:
@@ -233,7 +274,12 @@ if __name__ == u'__main__':
 
     parser.add_argument(u'--run', action=u'store_true',
                         help=u'Run pipeline.')
-       
+
+
+    parser.add_argument(u'--run-summarizer', action=u'store_true',
+                        dest=u'run_summarizer',
+                        help=u'Train salience models and run summarizer.')
+   
     parser.add_argument(u'-q', u'--query-ids', nargs=u'+',
                         help=u'Filter task by query ids, e.g. TS14.11',
                         default=None, required=False)
