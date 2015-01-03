@@ -29,7 +29,7 @@ class ProgressBar:
             else:
                 bar = '\r [' + ' ' * self.term_width_ + ']\r'
 
-            per = ' {:3.0f}% '.format(self.n_job_ * 100. / self.max_jobs_)
+            per = ' {:6.3f}% '.format(self.n_job_ * 100. / self.max_jobs_)
             bar = bar[:36] + per + bar[42:]
 
             sys.stdout.write(bar)
