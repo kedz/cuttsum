@@ -142,7 +142,7 @@ class SentenceStringsResource(Resource):
         if corenlp.server.check_status() is False:
             print "starting corenlp.server"
             corenlp.server.start(
-                mem="20G", threads=20,
+                mem="20G", threads=40,
                 annotators=['tokenize', 'ssplit', 'pos', 'lemma', 'ner'])
 
         self.do_work(sentencestring_worker_, jobs, n_procs, progress_bar,
