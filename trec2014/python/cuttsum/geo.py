@@ -152,16 +152,18 @@ def geo_worker_(job_queue, result_queue, **kwargs):
                 D = -geoquery.compute_distances(coords[:,None], coords)
                 ap = AffinityPropagation(affinity=u'precomputed')
                 Y = ap.fit_predict(D)     
-               
-                for center in ap.cluster_centers_indices_:
-                    centers.add((coords[center][0], coords[center][1]))
+              
+                if ap.cluster_centers_indices_ is not None: 
+                    for center in ap.cluster_centers_indices_:
+                        centers.add((coords[center][0], coords[center][1]))
             
-                centers = [{u'lat': lat, u'lng': lng} for lat, lng in centers]
-                centers_df = pd.DataFrame(centers, columns=[u'lat', u'lng'])
+                    centers = [{u'lat': lat, u'lng': lng} 
+                               for lat, lng in centers]
+                    centers_df = pd.DataFrame(centers, columns=[u'lat', u'lng'])
                 
-                with gzip.open(geo_tsv_path, u'w') as f:
-                    centers_df.to_csv(f, sep='\t', index=False, 
-                                      index_label=False, na_rep='nan')  
+                    with gzip.open(geo_tsv_path, u'w') as f:
+                        centers_df.to_csv(f, sep='\t', index=False, 
+                                          index_label=False, na_rep='nan')  
 
             result_queue.put(None)
         except Queue.Empty:
