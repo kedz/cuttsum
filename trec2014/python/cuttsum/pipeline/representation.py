@@ -22,6 +22,35 @@ class SalienceFeatureSet(object):
         if features is not None:
             self.activate_features(features)
 
+    def fs_name(self):
+        buf = 'fs'
+        if self.character_features:
+            buf += '-char'
+        if self.language_model_features:
+            buf += '-lm'
+        if self.frequency_features:
+            buf += '-tf'
+        if self.geographic_features:
+            buf += '-geo'
+        if self.query_features:
+            buf += '-query'
+        return buf
+
+    def get_feature_regex(self):
+        patts = []
+        if self.character_features:
+            patts.append('BASIC_')
+        if self.language_model_features:
+            patts.append('LM_')
+        if self.frequency_features:
+            patts.append('TFIDF_')
+        if self.geographic_features:
+            patts.append('GEO_')
+        if self.query_features:
+            patts.append('QUERY_')
+        return '|'.join(patts)
+
+
     def __unicode__(self):
         return u'SalienceFeatureSet: '  \
             u'char[{}] lm[{}] freq[{}] geo[{}] query[{}]'.format(
@@ -181,6 +210,7 @@ class BasicFeaturesExtractor(object):
 
     def __init__(self):
         self.features = [
+            u'BASIC_FEATS: doc position',
             u'BASIC_FEATS: sentence length',
             u'BASIC_FEATS: punc ratio',
             u'BASIC_FEATS: lower ratio',
@@ -215,9 +245,13 @@ class BasicFeaturesExtractor(object):
 
 
     def process_sentences(self, sc_strings, cnlp_strings):
-        return [self.process_sentence(sc_string, cnlp_string)
-                for sc_string, cnlp_string
-                in izip(sc_strings, cnlp_strings)]
+        feats = [self.process_sentence(sc_string, cnlp_string)
+                 for sc_string, cnlp_string
+                 in izip(sc_strings, cnlp_strings)]
+        n_sents = float(len(feats))
+        for i, feat in enumerate(feats):
+            feat[u'BASIC_FEATS: doc position'] = i / n_sents
+        return feats
     
     def process_sentence(self, sc_string, cnlp_string):
         feats = {}
