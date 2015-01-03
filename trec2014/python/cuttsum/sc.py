@@ -49,6 +49,7 @@ class UrlListResource(Resource):
     def get(self, event, corpus, overwrite=False, n_procs=1, 
             progress_bar=True, preroll=0, **kwargs):
 
+        print "Getting:", corpus
         data_dir = os.path.join(self.dir_, corpus.fs_name())
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
@@ -152,6 +153,7 @@ class SCChunkResource(Resource):
     def get(self, event, corpus, domains=None, overwrite=False, 
             n_procs=1, progress_bar=False, preroll=0, **kwargs):
         n_procs = min(10, n_procs)
+        print "processes:", n_procs
         jobs = []
         for domain, count, path, url in self.get_chunk_info_paths_urls(
             event, corpus, preroll=preroll):
@@ -190,12 +192,23 @@ def scchunk_worker_(job_queue, result_queue, **kwargs):
 class SuperSetUrlListResource(UrlListResource):
     def __unicode__(self):
         return u"cuttsum.sc.SuperSetUrlListResource"
-
-SuperSetUrlListResource.check_coverage = \
-    Resource.getsuperdependency(UrlListResource.check_coverage)
     
-UrlListResource.get = \
-    Resource.getsuperdependency(UrlListResource.get)
+    def get_event_url_paths(self, event, corpus, preroll=0):
+        corpus = corpus.get_superset()
+        return super(SuperSetUrlListResource, self).get_event_url_paths(
+            event, corpus, preroll=preroll)
+
+    def check_coverage(self, event, corpus, preroll=0, **kwargs):
+        corpus = corpus.get_superset()
+        return super(SuperSetUrlListResource, self).check_coverage(
+            event, corpus, preroll=preroll, **kwargs)
+
+    def get(self, event, corpus, overwrite=False, n_procs=1,
+            progress_bar=True, preroll=0, **kwargs):
+        corpus = corpus.get_superset()
+        return super(SuperSetUrlListResource, self).get(
+            event, corpus, overwrite=overwrite, n_procs=n_procs,
+            progress_bar=progress_bar, preroll=preroll, **kwargs)
 
 class SCSuperSetChunkResource(SCChunkResource):
     def __unicode__(self):
@@ -204,12 +217,27 @@ class SCSuperSetChunkResource(SCChunkResource):
     def dependencies(self):
         return tuple(['SuperSetUrlListResource',])
     
-SCSuperSetChunkResource.check_coverage = \
-    Resource.getsuperdependency(SCChunkResource.check_coverage)
+    def get_chunks_for_hour(self, hour, corpus):
+        corpus = corpus.get_superset()
+        return super(SCSuperSetChunkResource, self).get_chunks_for_hour(
+            hour, corpus)
     
-SCSuperSetChunkResource.get = \
-    Resource.getsuperdependency(SCChunkResource.get)
+    def get_chunk_info_paths_urls(self, event, corpus, preroll=0):
+        corpus = corpus.get_superset()
+        return super(SCSuperSetChunkResource, 
+                     self).get_chunk_info_paths_urls(event, corpus,
+                                                     preroll=preroll)
 
+    def check_coverage(self, event, corpus, domains=None, preroll=0,
+                       **kwargs):
+        corpus = corpus.get_superset()
+        return super(SCSuperSetChunkResource, self).check_coverage(
+            event, corpus, domains=domains, preroll=preroll, **kwargs)
+
+    def get(self, event, corpus, **kwargs):
+        corpus = corpus.get_superset()
+        return super(SCSuperSetChunkResource, self).get(
+            event, corpus, **kwargs)
 
 class IdfResource(Resource):
     def __init__(self):
@@ -225,17 +253,17 @@ class IdfResource(Resource):
     def dependencies(self):
         return tuple(['SCSuperSetChunkResource',])
 
-    @Resource.getsuperdependency
     def get_idf_path(self, hour, corpus):
+        corpus = corpus.get_superset()
         return os.path.join(
             self.dir_, corpus.fs_name(), u'{}.idf.marisa.gz'.format(
                 hour.strftime(u'%Y-%m-%d-%H')))
 
-    @Resource.getsuperdependency
     def check_coverage(self, event, corpus, preroll=0, **kwargs):
+        corpus = corpus.get_superset()
         domains = kwargs.get(u'domains', None)
         data_dir = os.path.join(self.dir_, corpus.fs_name())
-        chunks = SCChunkResource()
+        chunks = SCSuperSetChunkResource()
 
         n_hours = 0
         n_covered = 0
@@ -251,17 +279,18 @@ class IdfResource(Resource):
         else:
             return n_covered / float(n_hours)
 
-    @Resource.getsuperdependency
-    def get(self, event, corpus, **kwargs):
+    def get(self, event, corpus, preroll=0, **kwargs):
+        corpus = corpus.get_superset()
+        print corpus
         data_dir = os.path.join(self.dir_, corpus.fs_name())
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
         domains = kwargs.get(u'domains', None)
-        chunks = SCChunkResource()
+        chunks = SCSuperSetChunkResource()
         
         hour2chunks = defaultdict(list)
         for d, c, path, url in chunks.get_chunk_info_paths_urls(
-            event, corpus):
+            event, corpus, preroll=preroll):
             if domains is None or d in domains:
                 hour = os.path.basename(os.path.dirname(path))
                 hour2chunks[hour].append(path)
