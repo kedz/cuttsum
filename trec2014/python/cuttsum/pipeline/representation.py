@@ -457,11 +457,11 @@ class GeoFeaturesExtractor(object):
                     np.min(d)
 
         feats = [feats] * len(strings)
-        for i, locs in enumerate(locations):
-            if len(locs) > 0:
-                feats[i][u'GEO_FEATS: contains loc str'] = 1
-            else:
-                feats[i][u'GEO_FEATS: contains loc str'] = 0
+#        for i, locs in enumerate(locations):
+#            if len(locs) > 0:
+#                feats[i][u'GEO_FEATS: contains loc str'] = 1
+#            else:
+#                feats[i][u'GEO_FEATS: contains loc str'] = 0
         return feats
 
     def load_cluster_paths_(self, cluster_paths):
