@@ -1,7 +1,8 @@
 import cuttsum
 import random
 from .representation import SalienceFeatureSet
-from .salience import SalienceModels
+from .salience import SalienceModels, SaliencePredictions
+
 
 def feature_ablation_jobs(key, per_train=.6, random_seed=42):
     def desc(train, test, features):
@@ -143,7 +144,14 @@ class PipelineJob(object):
 
 
     def start(self, **kwargs):
-        for event, corpus in self.training_data:
+
+        print "  checking resources and models"
+        print "  ============================="
+        for event, corpus in self.testing_data:
+            if event.fs_name() != u'2012_buenos_aires_rail_disaster':
+                continue
+       
+                 
             print event.fs_name(), corpus.fs_name()
             has_all_resources = self.check_resource_pipeline(
                 event, corpus, **kwargs)
@@ -158,6 +166,22 @@ class PipelineJob(object):
                 self.train_models(event, corpus, self.feature_set, **kwargs)
 
             print  "+  model dependency checks met!"
+
+
+        print "  checking predictions"
+        print "  ============================="
+
+        for event, corpus in self.testing_data:
+            if event.fs_name() != u'2012_buenos_aires_rail_disaster':
+                continue
+ 
+            has_all_predictions = self.check_model_predictions(
+                event, corpus, self.feature_set, self.key, **kwargs)
+            if not has_all_predictions:
+                self.predict_salience(event, corpus, self.feature_set,
+                                      self.key, **kwargs)
+
+
             import sys
             sys.exit()
 
@@ -176,6 +200,7 @@ class PipelineJob(object):
                 coverage = resource.check_coverage(event, corpus, **kwargs)
                 print "    {:50s} : {:7.3f} %".format(resource, 100. * coverage)
                 if coverage != 1:
+                    print kwargs
                     resource.get(event, corpus, **kwargs)
         print 
         if not self.check_resource_pipeline(event, corpus, **kwargs):
@@ -183,11 +208,28 @@ class PipelineJob(object):
 
     def check_model_pipeline(self, event, corpus, feature_set, **kwargs):
         sm = SalienceModels()
-        coverage = sm.check_coverage(event, corpus, feature_set, **kwargs) 
+        coverage = sm.check_coverage(event, corpus, feature_set, 
+                                     self.key, **kwargs) 
         return coverage == 1
     
-    def train_models(event, corpus, feature_set, **kwargs):
+    def train_models(self, event, corpus, feature_set, **kwargs):
+        print "  training salience models..."
         sm = SalienceModels()
-        sm.train_models(event, corpus, feature_set, **kwargs) 
-        if not sm.check_model_pipeline(event, corpus, feature_set, **kwargs):
-            raise Exception("Model pipeline failed!") 
+        sm.train_models(event, corpus, feature_set, self.key, **kwargs) 
+        if not self.check_model_pipeline(event, corpus, feature_set, **kwargs):
+            raise Exception("Model training failed!") 
+
+    def check_model_predictions(self, event, corpus, 
+                                feature_set, key, **kwargs):
+        sp = SaliencePredictions()
+        coverage = sp.check_coverage(event, corpus, feature_set, 
+                                     key, **kwargs)
+        return coverage == 1
+
+    def predict_salience(self, event, corpus, feature_set, key, **kwargs):
+        sp = SaliencePredictions()
+        print "Predicting!"
+        if not self.check_model_predictions(event, corpus, feature_set, key,
+                                            **kwargs):
+            raise Exception("Model prediction failed!") 
+
