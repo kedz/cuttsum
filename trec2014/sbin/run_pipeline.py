@@ -211,7 +211,9 @@ def run_summarizer_jobs(**kwargs):
     from cuttsum.pipeline.salience import SalienceModels
 
     for job in jobs.feature_ablation_jobs(u'feature-ablation'):
-        job.start()
+        print job
+
+        job.start(**kwargs)
 
 
         import sys
@@ -324,6 +326,14 @@ if __name__ == u'__main__':
     parser.add_argument(u'--preroll', type=int,
                         help=u'Extend event start time by PREROLL hours.',
                         default=0, required=False)
+
+    parser.add_argument(u'--n-samples', type=int,
+                        help=u'Number of salience models',
+                        default=10, required=False)
+
+    parser.add_argument(u'--sample-size', type=int,
+                        help=u'Sample size of salience models',
+                        default=100, required=False)
 
     args = parser.parse_args()
     kwargs = vars(args)
