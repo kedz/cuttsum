@@ -10,6 +10,7 @@ from cuttsum.detector import ArticleDetector
 import streamcorpus as sc
 import re
 import pandas as pd
+import numpy as np
 from itertools import izip
 import signal
 import Queue
@@ -230,8 +231,11 @@ def sentencefeature_worker_(job_queue, result_queue, **kwargs):
                     f, sep='\t', quoting=3, header=0)
             feature_maps = []
             articles = string_df.groupby(u'stream id')
-            for _, article in articles:
+            for name, article in articles:
                 #for index, sentence in article.iterrows():
+                #times = map(lambda x: x.split('-')[0], article[u'stream id']
+                doc_time = datetime.utcfromtimestamp(int(name.split('-')[0]))
+                since_start = doc_time - event.start
                 cnlp_strings = article[u'corenlp'].tolist()
                 sc_strings = article[u'streamcorpus'].tolist()
                 geo_strings = article[u'locations'].tolist()
@@ -240,12 +244,12 @@ def sentencefeature_worker_(job_queue, result_queue, **kwargs):
                 geo_feats = geo_ext.process_geo_strings(geo_strings)
 
                 tfidf_feats = tfidf_ext.process_streamcorpus_strings(
-                    sc_strings)
+                    sc_strings, since_start.total_seconds())
                 lm_feats = lm_ext.process_corenlp_strings(cnlp_strings)
                 basic_feats = basic_ext.process_sentences(
                     sc_strings, cnlp_strings)
                 for index, (_, sentence) in enumerate(article.iterrows()):
-                    assert len(tfidf_feats[index]) == preroll
+                    #assert len(tfidf_feats[index]) == preroll
                     feature_map = {u'stream id': sentence[u'stream id'],
                                    u'sentence id': sentence[u'sentence id']}
                     feature_map.update(basic_feats[index].iteritems())
@@ -260,6 +264,11 @@ def sentencefeature_worker_(job_queue, result_queue, **kwargs):
                 + tfidf_ext.features
             df = pd.DataFrame(feature_maps, columns=columns)
 
+            #for i, x in enumerate(df.iloc[0]):
+            #    print df.columns[i], x
+            #print np.all(pd.notnull(df))
+            #print pd.isnull(df).any(1).nonzero()[0]
+            assert np.all(pd.notnull(df))
             with gzip.open(feature_tsv_path, u'w') as f:
                 df.to_csv(f, sep='\t', index=False, index_label=False, 
                           na_rep='nan')  

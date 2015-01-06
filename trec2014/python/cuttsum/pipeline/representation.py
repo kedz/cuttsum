@@ -10,6 +10,7 @@ from ..geo import GeoQuery
 import numpy as np
 import pandas as pd
 from nltk.corpus import wordnet as wn
+import re
 
 class SalienceFeatureSet(object):
     def __init__(self, features=None):
@@ -119,7 +120,9 @@ class TfIdfExtractor(object):
         self.prev_tries_ = tries[1:]
 
         n_paths = len(paths)
-        self.features = [u'TFID_FFEATS: avg tfidf, t0'] \
+        self.features = \
+            [u"TFIDF_FEATS: time since start", 
+             'TFIDF_FEATS: avg tfidf, t0'] \
             + [u'TFIDF_FEATS: tfidf-delta, tm-{}'.format(i)
                for i in xrange(1, n_paths)]
 
@@ -130,16 +133,16 @@ class TfIdfExtractor(object):
             sentences.append(tokens)
         return sentences
 
-    def process_streamcorpus_strings(self, strings):
+    def process_streamcorpus_strings(self, strings, secs_since_start):
         sentences = self.tokenize(strings)
 
         tf_counts = self.make_tf_counts(sentences)
         feats = []
         for sentence in sentences:
-            sent_feat = {}
+            sent_feat = {"TFIDF_FEATS: time since start": secs_since_start}
             avg_tfidf_t0 = self.avg_tfidf(
                 self.current_trie_, sentence, tf_counts)
-            sent_feat[u'TFID_FFEATS: avg tfidf, t0'] = avg_tfidf_t0
+            sent_feat[u'TFIDF_FEATS: avg tfidf, t0'] = avg_tfidf_t0
             for i, trie in enumerate(self.prev_tries_, 1):
                 delta_idf = avg_tfidf_t0 - self.avg_tfidf(
                     trie, sentence, tf_counts)
@@ -180,7 +183,7 @@ class TfIdfExtractor(object):
     def avg_tfidf(self, trie, sentence, tf_counts):
         
         if trie is None:
-            return float('nan')
+            return 0 #float('nan')
         total_tfidf = 0
         n_terms = 0
 
@@ -204,7 +207,6 @@ class TfIdfExtractor(object):
             total_tfidf += tf_counts[word] * idf
         return total_tfidf / float(n_terms)    
 
-import re
 
 class BasicFeaturesExtractor(object):
 
@@ -271,6 +273,9 @@ class BasicFeaturesExtractor(object):
         n_upper = len(re.findall(r'\b[A-Z]', sc_string))
         n_all_caps = len(re.findall(r'\b[A-Z]+\b', sc_string))
         n_total = float(len(re.findall(r'\b[A-Za-z]', sc_string)))
+        if n_total == 0:
+            n_total = 1
+
         feats[u'BASIC_FEATS: lower ratio'] = n_lower / n_total
         feats[u'BASIC_FEATS: upper ratio'] = n_upper / n_total
         feats[u'BASIC_FEATS: all caps ratio'] = n_all_caps / n_total
@@ -401,9 +406,9 @@ class GeoFeaturesExtractor(object):
     def __init__(self, geo_cache_tsv_path, cluster_paths):
         self.gq_ = GeoQuery(geo_cache_tsv_path)
         self.hourly_clusters_ = self.load_cluster_paths_(cluster_paths)
-        self.features = [u'GEO_FEATS: median distance to cluster',] \
-            + [u'GEO_FEATS: median dist to clust_tm{}'.format(t)
-               for t in xrange(len(cluster_paths))] \
+        self.features = \
+            [u'GEO_FEATS: median dist to clust_tm{}'.format(t)
+             for t in xrange(len(cluster_paths))] \
             + [u'GEO_FEATS: first loc min dist to clust_tm{}'.format(t)
                for t in range(len(cluster_paths))]
  
@@ -439,16 +444,18 @@ class GeoFeaturesExtractor(object):
             if clusters is None or len(lls) == 0:
                 label = u'GEO_FEATS: median dist to clust_tm{}'.format(
                     t)
-                feats[label] = float('nan')
+                feats[label] = 12451.0 #float('nan')
                 label = \
                     u'GEO_FEATS: first loc min dist to clust_tm{}'.format(t)
-                feats[label] = float('nan')
+                feats[label] = 12451.0 #float('nan')
             else:
                 D = self.gq_.compute_distances(lls[:,None], clusters)
                 label = u'GEO_FEATS: median dist to clust_tm{}'.format(
                     t)
-                feats[label] = \
-                    np.min(np.median(D, axis=0))
+                med_dist = np.min(np.median(D, axis=0))
+                #if np.isnan(med_dist):
+                #    med_dist = 12451.0
+                feats[label] = med_dist
                 
                 d = self.gq_.compute_distances(first_loc, clusters)
                 label = \
