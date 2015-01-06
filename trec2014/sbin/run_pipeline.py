@@ -206,43 +206,47 @@ def print_event_info(query_ids=None, event_types=None, **kwargs):
         print "query     :", event.query
         print  
 
-def run_summarizer_jobs(**kwargs):
+def run_summarizer_jobs(feature_ablation=False, cross_fold=False, **kwargs):
     import cuttsum.pipeline.jobs as jobs
+
     from cuttsum.pipeline.salience import SalienceModels
+    if feature_ablation:
+        for job in jobs.feature_ablation_jobs(u'feature-ablation'):
+            print job
+            job.start(**kwargs)
 
-    for job in jobs.feature_ablation_jobs(u'feature-ablation'):
-        print job
+    if cross_fold:
+        for job in jobs.event_cross_validation_jobs("crossval"):
+            print job
+            job.start(**kwargs)
 
-        job.start(**kwargs)
-
-
-        import sys
-        sys.exit()
-        sm = SalienceModel()
-        print job
-        for event, corpus in job.testing_data:
-            if event.fs_name() != '2012_buenos_aires_rail_disaster':
-                continue
-            print "fetching resources..."
-            run_pipeline(
-                event, corpus, 
-                set(cuttsum.data.get_resource_managers()), **kwargs)
-
-            sentence_features = \
-                cuttsum.data.get_resource_manager(u'SentenceFeaturesResource')
-            nugget_similarities = \
-                cuttsum.data.get_resource_manager(
-                    u'NuggetSimilaritiesResource')
-            assert sentence_features.check_coverage(event, corpus) == 1.0
-            assert nugget_similarities.check_coverage(event, corpus) == 1.0
-            print  "dependency checks met!"
-
-            fs = job.feature_set
-            if sm.check_coverage(event, corpus, fs, **kwargs) != 1:
-                sm.get(event, corpus, fs, **kwargs)
-
-        import sys
-        sys.exit()
+#        import sys
+#        sys.exit()
+#        sm = SalienceModel()
+#        print job
+#        for event, corpus in job.testing_data:
+#            if event.fs_name() != '2012_buenos_aires_rail_disaster':
+#                continue
+#            print "fetching resources..."
+#            run_pipeline(
+#                event, corpus, 
+#                set(cuttsum.data.get_resource_managers()), **kwargs)
+#
+#            sentence_features = \
+#                cuttsum.data.get_resource_manager(u'SentenceFeaturesResource')
+#            nugget_similarities = \
+#                cuttsum.data.get_resource_manager(
+#                    u'NuggetSimilaritiesResource')
+#            assert sentence_features.check_coverage(event, corpus) == 1.0
+#            assert nugget_similarities.check_coverage(event, corpus) == 1.0
+#            print  "dependency checks met!"
+#
+#            fs = job.feature_set
+#            if sm.check_coverage(event, corpus, fs, **kwargs) != 1:
+#                sm.get(event, corpus, fs, **kwargs)
+#
+#        import sys
+#        sys.exit()
 
              
 def main(run_summarizer=False, report=False, event_info=False, run=False, 
@@ -250,8 +254,6 @@ def main(run_summarizer=False, report=False, event_info=False, run=False,
     if run_summarizer:
         del kwargs[u'active_resources']
         run_summarizer_jobs(**kwargs)
-        import sys
-        sys.exit()
     if dependency_graph:
         make_dependency_graph(**kwargs)
     if event_info:
@@ -281,6 +283,12 @@ if __name__ == u'__main__':
     parser.add_argument(u'--run-summarizer', action=u'store_true',
                         dest=u'run_summarizer',
                         help=u'Train salience models and run summarizer.')
+
+    parser.add_argument(u'--feature-ablation', action=u'store_true',
+                        help=u'Run feature ablation jobs.')
+
+    parser.add_argument(u'--cross-fold', action=u'store_true',
+                        help=u'Run event cross fold jobs.')
    
     parser.add_argument(u'-q', u'--query-ids', nargs=u'+',
                         help=u'Filter task by query ids, e.g. TS14.11',
@@ -334,6 +342,7 @@ if __name__ == u'__main__':
     parser.add_argument(u'--sample-size', type=int,
                         help=u'Sample size of salience models',
                         default=100, required=False)
+
 
     args = parser.parse_args()
     kwargs = vars(args)
