@@ -2,7 +2,7 @@ import os
 import re
 import gzip
 import pandas as pd
-from ..data import get_resource_manager
+from ..data import get_resource_manager, MultiProcessWorker
 from ..misc import ProgressBar
 import random
 import GPy
@@ -15,7 +15,8 @@ import Queue
 from sklearn.preprocessing import StandardScaler
 from sklearn.externals import joblib
 
-class SalienceModels(object):
+
+class SalienceModels(MultiProcessWorker):
     def __init__(self):
         self.dir_ = os.path.join(
             os.getenv(u'TREC_DATA', u'.'), u'salience-models')
@@ -23,8 +24,13 @@ class SalienceModels(object):
             os.makedirs(self.dir_)
 
     def get_model_dir(self, event, feature_set, prefix):
-        fname = event.fs_name() + '.' + feature_set.fs_name()
-        return os.path.join(self.dir_, prefix, fname)
+        return os.path.join(self.dir_, prefix + '.' + feature_set.fs_name(),
+                            event.fs_name())
+
+    def get_model_paths(self, event, feature_set, prefix, n_samples):
+        model_dir = self.get_model_dir(event, feature_set, prefix)
+        return [os.path.join(model_dir, 'model_{}.pkl'.format(ver))
+                for ver in xrange(n_samples)]
 
     def check_coverage(self, event, corpus, 
                        feature_set, prefix, n_samples=10, **kwargs):
@@ -38,8 +44,9 @@ class SalienceModels(object):
             return 0
         
         n_covered = 0
-        for i in xrange(n_samples):
-            model_path = os.path.join(model_dir, 'model_{}.pkl'.format(i))
+        for model_path in self.get_model_paths(
+            event, feature_set, prefix, n_samples):
+
             if os.path.exists(model_path):
                 n_covered += 1
         return n_covered / float(n_samples)
@@ -48,59 +55,23 @@ class SalienceModels(object):
                      progress_bar=False, random_seed=42,
                      n_samples=10, sample_size=100, **kwargs):
 
-        print n_samples, sample_size
+        model_paths = self.get_model_paths(
+            event, feature_set, prefix, n_samples)
+
         model_dir = self.get_model_dir(event, feature_set, prefix)
         if not os.path.exists(model_dir):
             os.makedirs(model_dir)
-
-        jobs = []
-        for version in xrange(n_samples):
-            model_path = os.path.join(model_dir,
-                'model_{}.pkl'.format(version))
-            jobs.append((model_path, random_seed + version))
         
-        self.do_work(worker, jobs, n_procs, progress_bar, event=event,
+        jobs = []
+        for ver, model_path in enumerate(model_paths):
+            jobs.append((model_path, random_seed + ver))
+        
+        self.do_work(salience_train_worker_, jobs, n_procs, 
+                     progress_bar, event=event,
                      corpus=corpus, feature_set=feature_set, 
                      sample_size=sample_size)
 
-    def do_work(self, worker, jobs, n_procs,
-                progress_bar, result_handler=None, **kwargs):
-        max_jobs = len(jobs)
-        job_queue = multiprocessing.Queue()
-        result_queue = multiprocessing.Queue()
-
-        for job in jobs:
-            job_queue.put(job)
-
-        pool = []        
-        for i in xrange(n_procs):
-            p = multiprocessing.Process(
-                target=worker, args=(job_queue, result_queue), kwargs=kwargs)
-            p.start()
-            pool.append(p)            
-
-            pb = ProgressBar(max_jobs)
-        try:
-            for n_job in xrange(max_jobs):
-                result = result_queue.get(block=True)
-                if result_handler is not None:
-                    result_handler(result)
-                if progress_bar is True:
-                    pb.update()
-
-            for p in pool:
-                p.join()
-
-        except KeyboardInterrupt:
-            pb.clear()
-            print "Completing current jobs and shutting down!"
-            while not job_queue.empty():
-                job_queue.get()
-            for p in pool:
-                p.join()
-            sys.exit()
-
-def worker(job_queue, result_queue, **kwargs):
+def salience_train_worker_(job_queue, result_queue, **kwargs):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     corpus = kwargs.get(u'corpus')
     event = kwargs.get(u'event')
@@ -111,37 +82,41 @@ def worker(job_queue, result_queue, **kwargs):
         try:
 
             model_path, random_seed = job_queue.get(block=False)
-            feats_df = load_all_feats(event, feature_set)
-            sims_df = load_all_sims(event)
+            feats_df, sims_df = load_all_feats(
+                event, feature_set, sample_size, random_seed)
+            #sims_df = load_all_sims(event)
 
             n_points = len(feats_df)
             assert n_points == len(sims_df)
-
-            indices = [i for i in xrange(n_points)]
-            random.seed(random_seed)
-            random.shuffle(indices)
-            indices = indices[:sample_size]
+            assert n_points == sample_size
 
             fgroups = get_group_indices(feats_df)
 
-            y = []
+            Y = []
             X = []
-            for i in indices:
-                streamid = feats_df.iloc[i][u'stream id']
-                sentid = feats_df.iloc[i][u'sentence id']
-                sentsims = sims_df[
-                    (sims_df[u'stream id'] == streamid) & \
-                    (sims_df[u'sentence id'] == sentid)]
-                max_sim = max(map(list, sentsims.values)[0][2:])
-                y.append(max_sim)
-                X.append(map(list, sentsims.values)[0][2:])
+            for i in xrange(sample_size):
+                assert feats_df.iloc[i][u'stream id'] == \
+                    sims_df.iloc[i][u'stream id']
+                assert feats_df.iloc[i][u'sentence id'] == \
+                    sims_df.iloc[i][u'sentence id']
+                
+                Y.append(sims_df.iloc[i].values[2:])
+                X.append(feats_df.iloc[i].values[2:])
 
-            y = np.array(y)
+            Y = np.array(Y, dtype=np.float64)
+            #y = y[:, np.newaxis]
+            X = np.array(X, dtype=np.float64)
+            #Xma = np.ma.masked_array(X, np.isnan(X)) 
+            xrescaler = StandardScaler()
+
+            yrescaler = StandardScaler()
+            
+            X = xrescaler.fit_transform(X)
+
+            Y = yrescaler.fit_transform(Y)
+            y = np.max(Y, axis=1)
             y = y[:, np.newaxis]
-            X = np.array(X)
-            Xma = np.ma.masked_array(X, np.isnan(X)) 
-            rescaler = StandardScaler()
-            Xma = rescaler.fit_transform(Xma)
+
 
             kern_comb = None
             for key, indices in fgroups.items():
@@ -154,7 +129,7 @@ def worker(job_queue, result_queue, **kwargs):
                 else:
                     kern_comb += kern
 
-            m = GPy.models.GPRegression(Xma, y, kern)
+            m = GPy.models.GPRegression(X, y, kern)
             m.unconstrain('')
             m.constrain_positive('')
                     
@@ -162,7 +137,7 @@ def worker(job_queue, result_queue, **kwargs):
                 num_restarts=20, robust=False, verbose=False,
                 parallel=False, num_processes=1, max_iters=1000)        
 
-            joblib.dump((rescaler, m), model_path)
+            joblib.dump((xrescaler, yrescaler, m), model_path)
 
             result_queue.put(None)
         except Queue.Empty:
@@ -170,43 +145,73 @@ def worker(job_queue, result_queue, **kwargs):
 
 
 
-def load_all_feats(event, fs):
-   
+def load_all_feats(event, fs, sample_size, random_seed):
+    random.seed(random_seed)
+ 
     all_df = None 
     features = get_resource_manager(u'SentenceFeaturesResource')
     fregex = fs.get_feature_regex() + "|stream id|sentence id"
+
+    resevoir = None
+    current_index = 0
+    hours = []
+    res_sims = None
+
     for hour in event.list_event_hours():
         path = features.get_tsv_path(event, hour)
+        #print path, current_index
         if not os.path.exists(path):
             continue
         with gzip.open(path, u'r') as f:
             df = pd.io.parsers.read_csv(
                 f, sep='\t', quoting=3, header=0)
-      
         df = df.filter(regex=fregex)
-        if all_df is None:
-            all_df = df
-        else:
-            all_df = pd.concat([all_df, df])
-    return all_df
+        
+        if resevoir is None:
+            resevoir = pd.DataFrame(columns=df.columns)
 
-def load_all_sims(event):
-   
-    all_df = None 
-    sims = get_resource_manager(u'NuggetSimilaritiesResource')
-    for hour in event.list_event_hours():
-        path = sims.get_tsv_path(event, hour)
-        if not os.path.exists(path):
-            continue
+        for _, row in df.iterrows():
+            if current_index < sample_size:
+                resevoir.loc[current_index] = row
+                hours.append(hour)
+            else:
+                r = random.randint(0, current_index)
+                if r < sample_size:
+                    resevoir.loc[r] = row
+                    hours[r] = hour
+            current_index += 1
+       # if resevoir is None:
+       #     resevoir = df.iloc[range(0, sample_size)]
+       #     current_index = sample_size
+       #     paths = [path for i in range(0, sample_size)]
+
+    s = get_resource_manager(u'NuggetSimilaritiesResource')
+    for hour in set(hours):
+        path = s.get_tsv_path(event, hour)
         with gzip.open(path, u'r') as f:
             df = pd.io.parsers.read_csv(
                 f, sep='\t', quoting=3, header=0)
-      
-        if all_df is None:
-            all_df = df
-        else:
-            all_df = pd.concat([all_df, df])
-    return all_df
+        if res_sims is None:
+            res_sims = pd.DataFrame([{} for x in range(sample_size)], 
+                                    columns=df.columns)
+        for idx, row_hour in enumerate(hours):
+            if hour != row_hour:
+                continue
+            stream_id = resevoir.iloc[idx][u'stream id']
+            sent_id = resevoir.iloc[idx][u'sentence id']
+            res_sims.loc[idx] = df.loc[
+                (df[u'stream id'] == stream_id) & \
+                (df[u'sentence id'] == sent_id)].iloc[0]
+             
+    for i in range(sample_size):
+        assert resevoir[u'sentence id'].iloc[i] == \
+            res_sims[u'sentence id'].iloc[i]
+            
+        assert resevoir[u'stream id'].iloc[i] == \
+            res_sims[u'stream id'].iloc[i]
+
+    return resevoir, res_sims
+    
 
 def get_group_indices(feat_df):
     idxmap = defaultdict(list)
@@ -219,10 +224,7 @@ def get_group_indices(feat_df):
 #        idxmap[feat] = (start, end)
     return idxmap
 
-
-
-
-class SaliencePredictions(object):
+class SaliencePredictions(MultiProcessWorker):
     def __init__(self):
         self.dir_ = os.path.join(
             os.getenv(u'TREC_DATA', u'.'), u'salience-predictions')
@@ -230,8 +232,14 @@ class SaliencePredictions(object):
             os.makedirs(self.dir_)
 
 
-    def get_tsv_path(self, event, hour, prefix):
-        data_dir = os.path.join(self.dir_, prefix, event.fs_name())
+    def get_tsv_dir(self, event, prefix, feature_set):
+        data_dir = os.path.join(self.dir_, 
+                                prefix + "." + feature_set.fs_name(),
+                                event.fs_name())
+        return data_dir
+
+    def get_tsv_path(self, event, hour, prefix, feature_set):
+        data_dir = self.get_tsv_dir(event, prefix, feature_set)
         return os.path.join(data_dir, u'{}.tsv.gz'.format(
             hour.strftime(u'%Y-%m-%d-%H')))
 
@@ -245,7 +253,7 @@ class SaliencePredictions(object):
 
         for hour in event.list_event_hours():
             feat_tsv_path = feats.get_tsv_path(event, hour)
-            sal_tsv_path = self.get_tsv_path(event, hour, prefix)
+            sal_tsv_path = self.get_tsv_path(event, hour, prefix, feature_set)
             if os.path.exists(feat_tsv_path):
                 n_feats += 1
                 if os.path.exists(sal_tsv_path):
@@ -254,4 +262,102 @@ class SaliencePredictions(object):
             return 0
         return n_covered / float(n_feats)
 
+    def predict_salience(self, event, corpus, feature_set, 
+                         prefix, model_events, n_procs=1, n_samples=10,
+                         progress_bar=False, **kwargs):
 
+        data_dir = self.get_tsv_dir(event, prefix, feature_set)
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+
+        feats = get_resource_manager(u'SentenceFeaturesResource')
+        sm = SalienceModels()
+        model_paths = []
+        for model_event in model_events:
+            model_paths.extend(
+                sm.get_model_paths(
+                    model_event, feature_set, prefix, n_samples))
+      
+        jobs = []
+        for hour in event.list_event_hours():
+            feat_tsv_path = feats.get_tsv_path(event, hour)
+            sal_tsv_path = self.get_tsv_path(event, hour, prefix, feature_set)
+            if os.path.exists(feat_tsv_path):
+                jobs.append((feat_tsv_path, sal_tsv_path))
+        
+        self.do_work(salience_predict_worker_, jobs, n_procs, 
+                     progress_bar, event=event,
+                     feature_set=feature_set,
+                     model_paths=model_paths)
+
+
+def salience_predict_worker_(job_queue, result_queue, **kwargs):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    event = kwargs.get(u'event')
+    fs = kwargs.get(u'feature_set')
+    model_paths = kwargs.get(u'model_paths')
+    model_paths.sort()
+    
+    model_keys = []
+    for model_path in model_paths:
+        #if not os.path.exists(model_path):
+        #    continue
+        parent_dir, model_num = os.path.split(model_path)
+        model_name = os.path.split(parent_dir)[-1]
+        model_keys.append(model_name + "." + model_num)
+
+    n_model_paths = len(model_paths)
+    fregex = fs.get_feature_regex() + "|stream id|sentence id"
+
+    while not job_queue.empty():
+        try:
+
+            feat_tsv_path, sal_tsv_path = job_queue.get(block=False)
+
+            with gzip.open(feat_tsv_path, u'r') as f:
+                feats_df = pd.io.parsers.read_csv(
+                    f, sep='\t', quoting=3, header=0)
+                feats_df = feats_df.filter(regex=fregex)
+ 
+            feats_df = feats_df.sort([u'stream id', u'sentence id'])   
+            n_points = len(feats_df)
+
+            sims = []
+            X = []
+            for i in xrange(n_points):
+                streamid = feats_df.iloc[i][u'stream id']
+                sentid = feats_df.iloc[i][u'sentence id']
+                x = feats_df.iloc[i].values[2:]
+                #print len(feats_df.columns), len(x), x
+                X.append(x)
+                sims.append({u'stream id': streamid, u'sentence id': sentid})
+
+
+            X = np.array(X, dtype=np.float64)
+           # print X.shape
+            for model_path in model_paths:
+                parent_dir, model_num = os.path.split(model_path)
+                model_name = os.path.split(parent_dir)[-1]
+                model_key = model_name + "." + model_num 
+                #if not os.path.exists(model_path):
+                #    continue
+                #print model_path
+                xrescaler, yrescaler, m = joblib.load(model_path)
+                #print xrescaler.mean_.shape
+                Xscale = xrescaler.transform(X)
+                result = m.predict(Xscale)                
+                #print len(result)
+                ##print result[0].shape
+                yp = result[0]
+                for i, y in enumerate(yp):
+                    sims[i][model_key] = y[0]
+                             
+            sims_df = pd.DataFrame(
+                sims, columns=[u'stream id', u'sentence id'] + model_keys)
+
+            with gzip.open(sal_tsv_path, u'w') as f:
+                sims_df.to_csv(f, sep='\t', index=False, index_label=False)  
+
+            result_queue.put(None)
+        except Queue.Empty:
+            pass

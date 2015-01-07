@@ -154,6 +154,7 @@ class SCChunkResource(Resource):
             n_procs=1, progress_bar=False, preroll=0, **kwargs):
         n_procs = min(10, n_procs)
         print "processes:", n_procs
+        print corpus.fs_name()
         jobs = []
         for domain, count, path, url in self.get_chunk_info_paths_urls(
             event, corpus, preroll=preroll):

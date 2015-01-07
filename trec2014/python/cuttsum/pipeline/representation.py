@@ -345,7 +345,8 @@ class QueryFeaturesExtractor(object):
         self.synonyms_ = []        
         self.hypernyms_ = []        
         self.hyponyms_ = []        
-        for synset in wn.synsets(event.type):
+        print event.type.split(' ')[0]
+        for synset in wn.synsets(event.type.split(' ')[0]):
             synonyms = \
                 [lemma.name().lower().replace(u'_', u' ').encode(u'utf-8')
                  for lemma in synset.lemmas()]
@@ -396,7 +397,10 @@ class QueryFeaturesExtractor(object):
             if len(hits) > 0:
                 queries_covered += 1
                 total_covered += len(hits)
-        qt_coverage = queries_covered / float(len(queries))
+        if len(queries) > 0:
+            qt_coverage = queries_covered / float(len(queries))
+        else:
+            qt_coverage = 0
 
         return {u'QUERY_FEATS: {} coverage'.format(feature_name): qt_coverage,
                 u'QUERY_FEATS: total {} matches'.format(feature_name): \

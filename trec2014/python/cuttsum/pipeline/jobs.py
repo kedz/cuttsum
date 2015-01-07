@@ -15,18 +15,19 @@ def feature_ablation_jobs(key, per_train=.6, random_seed=42):
             u', '.join(inactive_features))
 
     for job in job_generator(
-        random_event_splitter, leave_one_out_feature_selector, desc, key,
+        None, leave_one_out_feature_selector, desc, key,
         per_train=per_train, random_seed=random_seed):
         yield job
 
 def event_cross_validation_jobs(key):
     def desc(train, test, features):
-        test_event, corpus = test[0]
-        return u'{}/{}'.format(
-            test_event.title, corpus.fs_name())
+        #test_event, corpus = test[0]
+        #return u'{}/{}'.format(
+        #    test_event.title, corpus.fs_name())
+        return "event-cross-validation"
 
     for job in job_generator(
-        event_n_fold_selector, all_feature_selector, desc, key,):
+        None, all_feature_selector, desc, key,):
         yield job
 
 
@@ -71,16 +72,19 @@ def job_generator(event_selector, feature_selector,
     # Retrieve events.
     corpus_2013 = cuttsum.corpora.EnglishAndUnknown2013()
     events_2013 = [(event, corpus_2013)
-                   for event in cuttsum.events.get_2013_events()]
+                   for event in cuttsum.events.get_2013_events() 
+                   if event.fs_name() != 'june_2012_north_american_derecho']
 
     corpus_2014 = cuttsum.corpora.FilteredTS2014()
     events_2014 = [(event, corpus_2014)
                    for event in cuttsum.events.get_2014_events()]
 
     events = events_2013 + events_2014
+    if event_selector is None:
+        event_splits = [events]
 
     # Generate event splits.
-    event_splits = event_selector(events, **kwargs)
+    #event_splits = event_selector(events, **kwargs)
 
     # Generate feature splits.
     features = [u'character', u'language model', u'frequency',
@@ -91,21 +95,22 @@ def job_generator(event_selector, feature_selector,
     # Yield the all combinations of event splits and feature splits.
     for event_split in event_splits:
         for feature_split in feature_splits:
-            train, test = event_split
-            desc = job_descriptor(train, test, feature_split)
+            #train, test = event_split
+            desc = job_descriptor(None, None, feature_split)
             job_key = u"{}.{}".format(key, job_num)
-            job = PipelineJob(job_key, desc, train, test, feature_split)
+            job = PipelineJob(job_key, desc, events, feature_split)
             yield job
             job_num += 1
 
 class PipelineJob(object):
     def __init__(self, key, description, 
-        training_data, testing_data, feature_set):
+        event_data, feature_set):
         
         self.key = key
         self.description = description
-        self.training_data = training_data
-        self.testing_data = testing_data
+        self.event_data = event_data
+        #self.training_data = training_data
+        #self.testing_data = testing_data
         self.feature_set = feature_set
 
     def __str__(self):
@@ -115,8 +120,8 @@ class PipelineJob(object):
         strings = []
         strings.append(u"job key: {}".format(self.key))
         strings.append(u"job description: {}".format(self.description))
-        strings.append(u"training events:")
-        for event, corpus in self.training_data:
+        #strings.append(u"training events:")
+        for event, corpus in self.event_data:
             title = event.title
             if len(title) > 35:
                 title = title[0:31] + u' ...'
@@ -126,17 +131,17 @@ class PipelineJob(object):
             strings.append(
                 u'  {:8s} {:14s} {:35s} {:17s}'.format(
                     event.query_id, event.type, title, corpus_name))
-        strings.append(u"test events:")
-        for event, corpus in self.testing_data:
-            title = event.title
-            if len(title) > 35:
-                title = title[0:31] + u' ...'
-            corpus_name = corpus.fs_name()
-            if len(corpus_name) > 17:
-                corpus_name = corpus_name[0:13] + u' ...'
-            strings.append(
-                u'  {:8s} {:14s} {:35s} {:17s}'.format(
-                    event.query_id, event.type, title, corpus_name))
+        #strings.append(u"test events:")
+        #for event, corpus in self.testing_data:
+        #    title = event.title
+            #if len(title) > 35:
+               # title = title[0:31] + u' ...'
+           # corpus_name = corpus.fs_name()
+           # if len(corpus_name) > 17:
+           #     corpus_name = corpus_name[0:13] + u' ...'
+           # strings.append(
+           #     u'  {:8s} {:14s} {:35s} {:17s}'.format(
+           #         event.query_id, event.type, title, corpus_name))
 
         strings.append(unicode(self.feature_set))
 
@@ -145,19 +150,18 @@ class PipelineJob(object):
 
     def start(self, **kwargs):
 
+        
+#        training_data = []
         print "  checking resources and models"
         print "  ============================="
-        for event, corpus in self.testing_data:
-            if event.fs_name() != u'2012_buenos_aires_rail_disaster':
-                continue
-       
-                 
+        for event, corpus in self.event_data:
+                       
             print event.fs_name(), corpus.fs_name()
             has_all_resources = self.check_resource_pipeline(
                 event, corpus, **kwargs)
             if not has_all_resources:
                 self.run_resource_pipeline(event, corpus, **kwargs)
-            
+
             print  "+  resource dependency checks met!"
             
             has_all_models = self.check_model_pipeline(
@@ -171,19 +175,19 @@ class PipelineJob(object):
         print "  checking predictions"
         print "  ============================="
 
-        for event, corpus in self.testing_data:
-            if event.fs_name() != u'2012_buenos_aires_rail_disaster':
-                continue
+        model_events = set(event for event, corpus in self.event_data)
+        for event, corpus in self.event_data:
  
+            print event.fs_name(), "/", corpus.fs_name()
             has_all_predictions = self.check_model_predictions(
                 event, corpus, self.feature_set, self.key, **kwargs)
             if not has_all_predictions:
                 self.predict_salience(event, corpus, self.feature_set,
-                                      self.key, **kwargs)
+                                      self.key, model_events - set([event]), 
+                                      **kwargs)
+            print  "+  model prediction checks met!"
 
 
-            import sys
-            sys.exit()
 
     def check_resource_pipeline(self, event, corpus, **kwargs):
         sfeats = \
@@ -213,7 +217,7 @@ class PipelineJob(object):
         return coverage == 1
     
     def train_models(self, event, corpus, feature_set, **kwargs):
-        print "  training salience models..."
+        print "-  training salience models..."
         sm = SalienceModels()
         sm.train_models(event, corpus, feature_set, self.key, **kwargs) 
         if not self.check_model_pipeline(event, corpus, feature_set, **kwargs):
@@ -226,10 +230,14 @@ class PipelineJob(object):
                                      key, **kwargs)
         return coverage == 1
 
-    def predict_salience(self, event, corpus, feature_set, key, **kwargs):
+    def predict_salience(self, event, corpus, feature_set, key,
+                         model_events, **kwargs):
+
+        print "-  predicting salience..."
         sp = SaliencePredictions()
-        print "Predicting!"
-        if not self.check_model_predictions(event, corpus, feature_set, key,
-                                            **kwargs):
+        sp.predict_salience(event, corpus, feature_set, key, 
+                            model_events, **kwargs)
+        if not self.check_model_predictions(event, corpus, feature_set, 
+                                            key, **kwargs):
             raise Exception("Model prediction failed!") 
 
