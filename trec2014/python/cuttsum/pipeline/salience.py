@@ -106,35 +106,42 @@ def salience_train_worker_(job_queue, result_queue, **kwargs):
             Y = np.array(Y, dtype=np.float64)
             #y = y[:, np.newaxis]
             X = np.array(X, dtype=np.float64)
+            X += 1.e-2 * np.random.normal(0, 1, X.shape)
             #Xma = np.ma.masked_array(X, np.isnan(X)) 
             xrescaler = StandardScaler()
 
             yrescaler = StandardScaler()
             
             X = xrescaler.fit_transform(X)
-
+            bad_cols = set(np.where(~X.any(axis=0))[0]) | \
+                set(np.where(np.all(X == X[0,:], axis=0))[0])
+            #print bad_cols
+            #if len(bad_cols) > 0:
+            #    result_queue.put(None)
+            #    return 
             Y = yrescaler.fit_transform(Y)
             y = np.max(Y, axis=1)
             y = y[:, np.newaxis]
 
-
             kern_comb = None
             for key, indices in fgroups.items():
-                
+                good_indices = set(indices) - bad_cols
+                indices = sorted(list(good_indices))
                 kern = GPy.kern.RBF(input_dim=len(indices), 
                                     active_dims=indices, 
-                                    ARD=True)
+                                    ARD=False)
                                 
                 if kern_comb is None:
                     kern_comb = kern
                 else:
                     kern_comb += kern
-            kern_comb += GPy.kern.White(input_dim=X.shape[1])
-
+                kern_comb += GPy.kern.White(input_dim=len(indices),
+                                            active_dims=indices)
             try:
-                m = GPy.models.GPRegression(X, y, kern)
+                m = GPy.models.GPRegression(X, y, kern_comb)
                 m.unconstrain('')
                 m.constrain_positive('')
+                #m['.*white'].constrain_fixed(1.)
                         
                 m.optimize_restarts(
                     num_restarts=10, robust=False, verbose=False,
