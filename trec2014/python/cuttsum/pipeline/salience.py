@@ -14,7 +14,7 @@ import sys
 import Queue
 from sklearn.preprocessing import StandardScaler
 from sklearn.externals import joblib
-
+from scipy import linalg
 
 class SalienceModels(MultiProcessWorker):
     def __init__(self):
@@ -124,20 +124,27 @@ def salience_train_worker_(job_queue, result_queue, **kwargs):
                 kern = GPy.kern.RBF(input_dim=len(indices), 
                                     active_dims=indices, 
                                     ARD=True)
+                                
                 if kern_comb is None:
                     kern_comb = kern
                 else:
                     kern_comb += kern
+            kern_comb += GPy.kern.White(input_dim=X.shape[1])
 
-            m = GPy.models.GPRegression(X, y, kern)
-            m.unconstrain('')
-            m.constrain_positive('')
-                    
-            m.optimize_restarts(
-                num_restarts=20, robust=False, verbose=False,
-                parallel=False, num_processes=1, max_iters=1000)        
+            try:
+                m = GPy.models.GPRegression(X, y, kern)
+                m.unconstrain('')
+                m.constrain_positive('')
+                        
+                m.optimize_restarts(
+                    num_restarts=10, robust=False, verbose=False,
+                    parallel=False, num_processes=1, max_iters=20)        
 
-            joblib.dump((xrescaler, yrescaler, m), model_path)
+                joblib.dump((xrescaler, yrescaler, m), model_path)
+            except linalg.LinAlgError, e:
+                print e
+                #print X
+                #print y
 
             result_queue.put(None)
         except Queue.Empty:
