@@ -362,6 +362,8 @@ def salience_predict_worker_(job_queue, result_queue, **kwargs):
                     event, hour, prefix, fs, model_path)
                 if not os.path.exists(feat_tsv_path):
                     continue
+                if os.path.exists(sal_tsv_path):
+                    continue
  
                 with gzip.open(feat_tsv_path, u'r') as f:
                     feats_df = pd.io.parsers.read_csv(
@@ -491,4 +493,13 @@ class SaliencePredictionAggregator(object):
         return os.path.join(data_dir, u'{}.tsv.gz'.format(
             hour.strftime(u'%Y-%m-%d-%H')))
 
+    def get_dataframe(self, event, hour, prefix, feature_set):
+        tsv = self.get_tsv_path(event, hour, prefix, feature_set)
+        if not os.path.exists(tsv):
+            return None
+        else:
+            with gzip.open(tsv, u'r') as f:
+                df = pd.io.parsers.read_csv(
+                    f, sep='\t', quoting=3, header=0)
+                return df
 
