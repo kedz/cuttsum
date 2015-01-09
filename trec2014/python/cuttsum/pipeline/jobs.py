@@ -180,7 +180,8 @@ class PipelineJob(object):
  
             print event.fs_name(), "/", corpus.fs_name()
             has_all_predictions = self.check_model_predictions(
-                event, corpus, self.feature_set, self.key, **kwargs)
+                event, corpus, self.feature_set,
+                self.key, model_events - set([event]), **kwargs)
             if not has_all_predictions:
                 self.predict_salience(event, corpus, self.feature_set,
                                       self.key, model_events - set([event]), 
@@ -224,10 +225,10 @@ class PipelineJob(object):
             raise Exception("Model training failed!") 
 
     def check_model_predictions(self, event, corpus, 
-                                feature_set, key, **kwargs):
+                                feature_set, key, model_events, **kwargs):
         sp = SaliencePredictions()
         coverage = sp.check_coverage(event, corpus, feature_set, 
-                                     key, **kwargs)
+                                     key, model_events, **kwargs)
         return coverage == 1
 
     def predict_salience(self, event, corpus, feature_set, key,
@@ -238,6 +239,6 @@ class PipelineJob(object):
         sp.predict_salience(event, corpus, feature_set, key, 
                             model_events, **kwargs)
         if not self.check_model_predictions(event, corpus, feature_set, 
-                                            key, **kwargs):
+                                            key, model_events, **kwargs):
             raise Exception("Model prediction failed!") 
 
