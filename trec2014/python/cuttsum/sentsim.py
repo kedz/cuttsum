@@ -99,6 +99,25 @@ class SentenceStringsResource(Resource):
     def __unicode__(self):
         return u"cuttsum.sentsim.SentenceStringsResource"
 
+    def dataframe_generator(self, event):
+        for hour in event.list_event_hours():
+            tsv_path = self.get_tsv_path(event, hour)
+            if os.path.exists(tsv_path):
+                with gzip.open(tsv_path, u'r') as f:
+                    df = pd.io.parsers.read_csv(
+                        f, sep='\t', quoting=3, header=0)
+                    yield df
+
+    def get_dataframe(self, event, hour):
+        tsv = self.get_tsv_path(event, hour)
+        if not os.path.exists(tsv):
+            return None
+        else:
+            with gzip.open(tsv, u'r') as f:
+                df = pd.io.parsers.read_csv(
+                    f, sep='\t', quoting=3, header=0)
+                return df
+
     def get_tsv_path(self, event, hour):
         data_dir = os.path.join(self.dir_, event.fs_name())
         return os.path.join(data_dir, u'{}.tsv.gz'.format(
@@ -248,6 +267,25 @@ class SentenceLatentVectorsResource(Resource):
             os.getenv(u'TREC_DATA', u'.'), u'sentence-latent-vectors')
         if not os.path.exists(self.dir_):
             os.makedirs(self.dir_)
+
+    def dataframe_generator(self, event):
+        for hour in event.list_event_hours():
+            tsv_path = self.get_tsv_path(event, hour)
+            if os.path.exists(tsv_path):
+                with gzip.open(tsv_path, u'r') as f:
+                    df = pd.io.parsers.read_csv(
+                        f, sep='\t', quoting=3, header=0)
+                    yield df
+
+    def get_dataframe(self, event, hour):
+        tsv = self.get_tsv_path(event, hour)
+        if not os.path.exists(tsv):
+            return None
+        else:
+            with gzip.open(tsv, u'r') as f:
+                df = pd.io.parsers.read_csv(
+                    f, sep='\t', quoting=3, header=0)
+                return df
 
     def get_tsv_path(self, event, hour):
         data_dir = os.path.join(self.dir_, event.fs_name())
