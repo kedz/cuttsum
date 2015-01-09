@@ -1,7 +1,8 @@
 import cuttsum
 import random
 from .representation import SalienceFeatureSet
-from .salience import SalienceModels, SaliencePredictions
+from .salience import SalienceModels, SaliencePredictions, \
+    SaliencePredictionAggregator
 
 
 def feature_ablation_jobs(key, per_train=.6, random_seed=42):
@@ -188,7 +189,17 @@ class PipelineJob(object):
                                       **kwargs)
             print  "+  model prediction checks met!"
 
+            spg = SaliencePredictionAggregator()
+            cov = spg.check_coverage(
+                event, corpus, self.feature_set,
+                self.key, model_events - set([event]), **kwargs)
+            if cov != 1:
+                spg.get(event, corpus, self.feature_set,
+                        self.key, model_events - set([event]), **kwargs)
+            print "+  model predictions aggregated!"
 
+            import sys
+            sys.exit()
 
     def check_resource_pipeline(self, event, corpus, **kwargs):
         sfeats = \
@@ -203,7 +214,8 @@ class PipelineJob(object):
         for group in cuttsum.data.get_sorted_dependencies(reverse=False):
             for resource in group:
                 coverage = resource.check_coverage(event, corpus, **kwargs)
-                print "    {:50s} : {:7.3f} %".format(resource, 100. * coverage)
+                print "    {:50s} : {:7.3f} %".format(
+                    resource, 100. * coverage)
                 if coverage != 1:
                     print kwargs
                     resource.get(event, corpus, **kwargs)

@@ -413,3 +413,82 @@ def salience_predict_worker_(job_queue, result_queue, **kwargs):
             result_queue.put(None)
         except Queue.Empty:
             pass
+
+class SaliencePredictionAggregator(object):
+    def __init__(self):
+        self.dir_ = os.path.join(
+            os.getenv(u'TREC_DATA', u'.'), u'salience-predictions-agg')
+        if not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
+
+
+    def check_coverage(self, event, corpus, feature_set,
+                       prefix, model_events, n_samples=10, **kwargs):
+
+        feats = get_resource_manager(u'SentenceFeaturesResource')
+        n_hours = 0
+        n_covered = 0
+
+        for hour in event.list_event_hours():
+            feats_tsv_path = feats.get_tsv_path(event, hour)
+            sal_tsv_path = self.get_tsv_path(event, hour, prefix, feature_set)
+            if os.path.exists(feats_tsv_path):
+                n_hours += 1
+                if os.path.exists(sal_tsv_path):
+                    n_covered += 1
+        if n_hours == 0:
+            return 0
+        else:
+            return n_covered / float(n_hours)
+
+    def get(self, event, corpus, feature_set,
+            prefix, model_events, n_samples=10, **kwargs):
+
+        feats = get_resource_manager(u'SentenceFeaturesResource')
+        
+        sm = SalienceModels()
+        sp = SaliencePredictions()
+        model_paths = []
+        for model_event in model_events:
+            model_paths.extend(
+                sm.get_model_paths(
+                    model_event, feature_set, prefix, n_samples))
+ 
+        for hour in event.list_event_hours():
+            tsv_paths = \
+                [sp.get_tsv_path(event, hour, prefix, feature_set, model_path)
+                 for model_path in model_paths]
+            tsv_paths = [path for path in tsv_paths if os.path.exists(path)]
+            if len(tsv_paths) == 0:
+                continue
+            data = []
+            for tsv_path in tsv_paths:
+                with gzip.open(tsv_path, u'r') as f:
+                    df = pd.io.parsers.read_csv(
+                        f, sep='\t', quoting=3, header=0)
+                    df.set_index([u'stream id', u'sentence id'], inplace=True)
+                    data.append(df)
+            df = pd.concat(data, axis=1)
+            agg_path = self.get_tsv_path(event, hour, prefix, feature_set)
+            agg_dir = os.path.dirname(agg_path)
+            if not os.path.exists(agg_dir):
+                os.makedirs(agg_dir)
+
+            df.columns=sorted(df.columns)
+            print df
+            with gzip.open(agg_path, u'w') as f:
+                df.to_csv(f, sep='\t')  
+
+    def get_tsv_dir(self, event, prefix, feature_set):
+        data_dir = os.path.join(self.dir_, 
+                                prefix + "." + feature_set.fs_name(),
+                                event.fs_name())
+        return data_dir
+
+    def get_tsv_path(self, event, hour, prefix, feature_set):
+        
+        data_dir = self.get_tsv_dir(event, prefix, feature_set)
+        return os.path.join(data_dir, u'{}.tsv.gz'.format(
+            hour.strftime(u'%Y-%m-%d-%H')))
+
+
