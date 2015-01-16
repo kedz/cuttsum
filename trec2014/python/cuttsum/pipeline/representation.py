@@ -299,9 +299,7 @@ class LMProbExtractor(object):
         self.tok_ = RegexpTokenizer(r'\w+')
         self.domain_lm_ = Client(domain_port, domain_order, True)
         self.gigaword_lm_ = Client(gigaword_port, gigaword_order, True)
-        self.features = [u"LM_FEATS: domain lp", 
-                         u"LM_FEATS: domain avg lp",
-                         u"LM_FEATS: gigaword lp", 
+        self.features = [u"LM_FEATS: domain avg lp",
                          u"LM_FEATS: gigaword avg lp"]
 
     def process_corenlp_strings(self, strings):
@@ -310,9 +308,7 @@ class LMProbExtractor(object):
     def process_corenlp_string(self, string):
         dmn_lp, dmn_avg_lp = self.domain_lm_.sentence_log_prob(string)
         gw_lp, gw_avg_lp = self.gigaword_lm_.sentence_log_prob(string)
-        return {u"LM_FEATS: domain lp": dmn_lp, 
-                u"LM_FEATS: domain avg lp": dmn_avg_lp,
-                u"LM_FEATS: gigaword lp": gw_lp, 
+        return {u"LM_FEATS: domain avg lp": dmn_avg_lp,
                 u"LM_FEATS: gigaword avg lp": gw_avg_lp}
 
     def process_article(self, si):
@@ -332,8 +328,8 @@ class LMProbExtractor(object):
             gw_lp, gw_avg_lp = self.gigaword_lm_.sentence_log_prob(
                 bytes_string)
             lm_scores.append(
-                {u"domain lp": dmn_lp, u"domain avg lp": dmn_avg_lp,
-                 u"gigaword lp": gw_lp, u"gigaword avg lp": gw_avg_lp})
+                {u"domain avg lp": dmn_avg_lp,
+                 u"gigaword avg lp": gw_avg_lp})
         return lm_scores
 
 
