@@ -48,6 +48,21 @@ def get_2014_sampled_updates():
 
     return df
 
+def get_2013_updates():
+    updates_tsv = resource_filename(
+        u'cuttsum', os.path.join(u'2013-data', u'updates.tsv.gz'))
+ 
+    with gzip.open(updates_tsv, u'r') as f:
+        df = pd.io.parsers.read_csv(
+            f, sep='\t', quoting=3, header=0,
+            #converters={u'query id': lambda x: 'TS14.{}'.format(x),
+           #             u'update datetime': __dt_cvrt},
+            names=[u'query id', u'update id', u'document id',
+                   u'sentence id', u'length', u'duplicate id', u'text'])
+
+    return df
+
+
 def get_2014_sampled_updates_extended():
     updates_tsv = resource_filename(
         u'cuttsum', os.path.join(u'2014-data', u'updates_sampled.extended.tsv.gz'))

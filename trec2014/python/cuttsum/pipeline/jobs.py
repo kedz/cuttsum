@@ -3,7 +3,11 @@ import random
 from .representation import SalienceFeatureSet
 from .salience import SalienceModels, SaliencePredictions, \
     SaliencePredictionAggregator
-
+from cuttsum.summarizer.baseline import HACSummarizer
+from cuttsum.summarizer.ap import APSummarizer, APSalienceSummarizer
+import os
+from multiprocessing import Pool
+from ..misc import ProgressBar
 
 def feature_ablation_jobs(key, per_train=.6, random_seed=42):
     def desc(train, test, features):
@@ -197,9 +201,53 @@ class PipelineJob(object):
                 spg.get(event, corpus, self.feature_set,
                         self.key, model_events - set([event]), **kwargs)
             print "+  model predictions aggregated!"
+#
+#   
+        ap = APSummarizer() 
+        apsal = APSalienceSummarizer()
+#        hac = HACSummarizer()
+#
+        print "running summarizer jobs..."
+        jobs = []
+        for event, corpus in self.event_data:
 
-            import sys
-            sys.exit()
+            #if not os.path.exists(hac.dir_):
+            #    os.makedirs(hac.dir_)               
+            #jobs.append((event, corpus, self.key, self.feature_set, hac))
+
+            apsal_tsv_dir = apsal.get_tsv_dir(self.key, self.feature_set)
+            if not os.path.exists(apsal_tsv_dir):
+                os.makedirs(apsal_tsv_dir)
+            if not os.path.exists(ap.dir_):
+                os.makedirs(ap.dir_)        
+#            txt_dir = apsal.get_txt_dir(self.key, self.feature_set)
+#            if not os.path.exists(txt_dir):
+#                os.makedirs(txt_dir)
+#            ssv_dir = apsal.get_ssv_dir(self.key, self.feature_set)
+#            if not os.path.exists(ssv_dir):
+#                os.makedirs(ssv_dir)               
+
+            jobs.append((event, corpus, self.key, self.feature_set, ap))
+            jobs.append((event, corpus, self.key, self.feature_set, apsal))
+#            
+#            #jobs.append((event, corpus, self.key, self.feature_set, hac))
+#            
+#        
+        n_procs = kwargs.get(u'n_procs', 1)
+        n_jobs = len(jobs)
+        pool = Pool(n_procs)
+        pb = ProgressBar(n_jobs)
+#        for job in jobs:
+#            sum_worker(job)
+        for result in pool.imap_unordered(sum_worker, jobs):
+            pb.update()
+#
+#        import sys
+#        sys.exit()
+
+#
+#            import sys
+#            sys.exit()
 
     def check_resource_pipeline(self, event, corpus, **kwargs):
         sfeats = \
@@ -253,4 +301,12 @@ class PipelineJob(object):
         if not self.check_model_predictions(event, corpus, feature_set, 
                                             key, model_events, **kwargs):
             raise Exception("Model prediction failed!") 
+
+def sum_worker(args):
+    event, corpus, prefix, feature_set, summarizer = args
+    tsv_path = summarizer.get_tsv_path(event, prefix, feature_set)
+    if os.path.exists(tsv_path):
+        return
+    summarizer.make_summary(event, corpus, prefix, feature_set)
+
 

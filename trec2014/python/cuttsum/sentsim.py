@@ -396,6 +396,16 @@ class NuggetSimilaritiesResource(Resource):
         return os.path.join(data_dir, u'{}.tsv.gz'.format(
             hour.strftime(u'%Y-%m-%d-%H')))
 
+    def get_dataframe(self, event, hour):
+        tsv = self.get_tsv_path(event, hour)
+        if not os.path.exists(tsv):
+            return None
+        else:
+            with gzip.open(tsv, u'r') as f:
+                df = pd.io.parsers.read_csv(
+                    f, sep='\t', quoting=3, header=0)
+                return df
+
     def get_matches(self, event, corpus):
         if corpus.year_ == 2014:
             df = get_2014_matches()

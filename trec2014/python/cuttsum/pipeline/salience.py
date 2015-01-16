@@ -129,7 +129,7 @@ def salience_train_worker_(job_queue, result_queue, **kwargs):
                 indices = sorted(list(good_indices))
                 kern = GPy.kern.RBF(input_dim=len(indices), 
                                     active_dims=indices, 
-                                    ARD=False)
+                                    ARD=True)
                                 
                 if kern_comb is None:
                     kern_comb = kern
@@ -455,8 +455,12 @@ class SaliencePredictionAggregator(object):
             model_paths.extend(
                 sm.get_model_paths(
                     model_event, feature_set, prefix, n_samples))
- 
-        for hour in event.list_event_hours():
+
+        hours = event.list_event_hours()
+        n_hours = len(hours)
+        pb = ProgressBar(n_hours)
+        for hour in hours:
+            pb.update()
             tsv_paths = \
                 [sp.get_tsv_path(event, hour, prefix, feature_set, model_path)
                  for model_path in model_paths]
@@ -477,7 +481,6 @@ class SaliencePredictionAggregator(object):
                 os.makedirs(agg_dir)
 
             df.columns=sorted(df.columns)
-            print df
             with gzip.open(agg_path, u'w') as f:
                 df.to_csv(f, sep='\t')  
 
