@@ -8,6 +8,11 @@ from cuttsum.summarizer.ap import APSummarizer, APSalienceSummarizer
 import os
 from multiprocessing import Pool
 from ..misc import ProgressBar
+from ..data import MultiProcessWorker
+import signal
+import Queue
+import sys
+import traceback
 
 def feature_ablation_jobs(key, per_train=.6, random_seed=42):
     def desc(train, test, features):
@@ -107,7 +112,7 @@ def job_generator(event_selector, feature_selector,
             yield job
             job_num += 1
 
-class PipelineJob(object):
+class PipelineJob(MultiProcessWorker):
     def __init__(self, key, description, 
         event_data, feature_set):
         
@@ -235,12 +240,18 @@ class PipelineJob(object):
 #        
         n_procs = kwargs.get(u'n_procs', 1)
         n_jobs = len(jobs)
-        pool = Pool(n_procs)
-        pb = ProgressBar(n_jobs)
+        #pool = Pool(n_procs)
+        #pb = ProgressBar(n_jobs)
 #        for job in jobs:
 #            sum_worker(job)
-        for result in pool.imap_unordered(sum_worker, jobs):
-            pb.update()
+       
+        jobs.reverse() 
+        self.do_work(sum_worker, jobs, **kwargs)
+        #for job in jobs:
+        #    sum_worker(job)
+        #    pb.update()
+        #for result in pool.imap_unordered(sum_worker, jobs):
+        #    pb.update()
 #
 #        import sys
 #        sys.exit()
@@ -302,11 +313,29 @@ class PipelineJob(object):
                                             key, model_events, **kwargs):
             raise Exception("Model prediction failed!") 
 
-def sum_worker(args):
-    event, corpus, prefix, feature_set, summarizer = args
-    tsv_path = summarizer.get_tsv_path(event, prefix, feature_set)
-    if os.path.exists(tsv_path):
-        return
-    summarizer.make_summary(event, corpus, prefix, feature_set)
-
+def sum_worker(job_queue, result_queue, **kwargs):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    while not job_queue.empty():
+        try:
+            event, corpus, prefix, feature_set, summarizer = \
+                job_queue.get(block=False)
+            try:
+                tsv_path = summarizer.get_tsv_path(event, prefix, feature_set)
+                if not os.path.exists(tsv_path):
+                    summarizer.make_summary(event, corpus, prefix, feature_set)
+            except Exception as e:
+                #exc_type, exc_obj, exc_tb = sys.exc_info()
+                #fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                #print(exc_type, fname, exc_tb.tb_lineno)
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                print "*** print_tb:"
+                traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+                print "*** print_exception:"
+                traceback.print_exception(exc_type, exc_value, exc_traceback,
+                                          limit=15, file=sys.stdout)
+            finally:
+                result_queue.put(None)
+        except Queue.Empty:
+            pass
+    return True 
 

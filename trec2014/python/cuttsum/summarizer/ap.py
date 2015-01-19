@@ -9,6 +9,7 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.cluster import AffinityPropagation
 from datetime import datetime, timedelta
 import pandas as pd
+from datetime import datetime
 
 class APSummarizer(object):
     def __init__(self):
@@ -31,6 +32,16 @@ class APSummarizer(object):
     def get_tsv_path(self, event, prefix=None, feature_set=None):
         return os.path.join(self.dir_,
             "ap-{}.tsv.gz".format(event.fs_name()))
+
+    def get_dataframe(self, event):
+        tsv = self.get_tsv_path(event)
+        if not os.path.exists(tsv):
+            return None
+        else:
+            with gzip.open(tsv, u'r') as f:
+                df = pd.io.parsers.read_csv(
+                    f, sep='\t', quoting=3, header=0)
+                return df
 
     def make_summary(self, event, corpus, prefix, feature_set):
         string_res = get_resource_manager(u'SentenceStringsResource')
@@ -117,9 +128,10 @@ class APSummarizer(object):
             af = AffinityPropagation(
                 preference=None, affinity='precomputed', max_iter=100,
                 damping=.7, verbose=False).fit(A)
-
             II = np.arange(n_sents)
-            for cnum, cluster in enumerate(set(af.labels_)):
+            if af.cluster_centers_indices_ is None:
+                continue
+            for cnum, cluster in enumerate(np.unique(af.labels_)):
                 e = af.cluster_centers_indices_[cluster]
                 cluster_size = II[cluster == af.labels_].shape[0]
                    
@@ -160,6 +172,16 @@ class APSalienceSummarizer(object):
         tsv_dir = self.get_tsv_dir(prefix, feature_set)
         return os.path.join(tsv_dir,
             "ap-sal-{}.tsv.gz".format(event.fs_name()))
+
+    def get_dataframe(self, event, prefix, feature_set):
+        tsv = self.get_tsv_path(event, prefix, feature_set)
+        if not os.path.exists(tsv):
+            return None
+        else:
+            with gzip.open(tsv, u'r') as f:
+                df = pd.io.parsers.read_csv(
+                    f, sep='\t', quoting=3, header=0)
+                return df
 
     def make_summary(self, event, corpus, prefix, feature_set):
         string_res = get_resource_manager(u'SentenceStringsResource')
@@ -286,11 +308,13 @@ class APSalienceSummarizer(object):
             #    event.start).total_seconds() // (6 * 3600))
             #cutoff = 2. * period / (1. + period)
             af = AffinityPropagation(
-                preference=P, affinity='precomputed', max_iter=100,
+                preference=P, affinity='precomputed', max_iter=500,
                 damping=.7, verbose=False).fit(A)
 
+            if af.cluster_centers_indices_ is None:
+                continue
             II = np.arange(n_sents)
-            for cnum, cluster in enumerate(set(af.labels_)):
+            for cnum, cluster in enumerate(np.unique(af.labels_)):
                 e = af.cluster_centers_indices_[cluster]
                 cluster_size = II[cluster == af.labels_].shape[0]
 
