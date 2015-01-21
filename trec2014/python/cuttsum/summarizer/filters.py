@@ -197,6 +197,19 @@ class HACFilteredSummary(object):
         return os.path.join(self.dir_,
             "hac-{}-dist{}.tsv".format(event.fs_name(), dist_cutoff))
 
+    def get_dataframe(self, event, dist_cutoff):
+        tsv = self.get_tsv_path(event, dist_cutoff)
+        if not os.path.exists(tsv):
+            return None
+        else:
+            with open(tsv, u'r') as f:
+                df = pd.io.parsers.read_csv(
+                    f, sep='\t', quoting=3,
+                    )
+                df.columns = ['query id', 'system id', 'run id', 'stream id',
+                              'sentence id', 'timestamp', 'conf', 'text']
+            return df
+
     def make(self, event, min_cluster_size=2, sim_threshold=.2264,
              dist_cutoff=1.35):
         tsv_path = self.get_tsv_path(event, dist_cutoff)
