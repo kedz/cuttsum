@@ -13,6 +13,7 @@ import signal
 import Queue
 import sys
 import traceback
+import numpy as np
 
 def feature_ablation_jobs(key, per_train=.6, random_seed=42):
     def desc(train, test, features):
@@ -210,34 +211,27 @@ class PipelineJob(MultiProcessWorker):
 #   
         ap = APSummarizer() 
         apsal = APSalienceSummarizer()
-#        hac = HACSummarizer()
+        hac = HACSummarizer()
 #
         print "running summarizer jobs..."
         jobs = []
         for event, corpus in self.event_data:
-
-            #if not os.path.exists(hac.dir_):
-            #    os.makedirs(hac.dir_)               
-            #jobs.append((event, corpus, self.key, self.feature_set, hac))
 
             apsal_tsv_dir = apsal.get_tsv_dir(self.key, self.feature_set)
             if not os.path.exists(apsal_tsv_dir):
                 os.makedirs(apsal_tsv_dir)
             if not os.path.exists(ap.dir_):
                 os.makedirs(ap.dir_)        
-#            txt_dir = apsal.get_txt_dir(self.key, self.feature_set)
-#            if not os.path.exists(txt_dir):
-#                os.makedirs(txt_dir)
-#            ssv_dir = apsal.get_ssv_dir(self.key, self.feature_set)
-#            if not os.path.exists(ssv_dir):
-#                os.makedirs(ssv_dir)               
+            if not os.path.exists(hac.dir_):
+                os.makedirs(hac.dir_)
 
+            #for cutoff in np.arange(1.00, 2., .05):
+            #    jobs.append(
+            #        (event, corpus, self.key, self.feature_set, hac, cutoff))
+            
             jobs.append((event, corpus, self.key, self.feature_set, ap))
             jobs.append((event, corpus, self.key, self.feature_set, apsal))
-#            
-#            #jobs.append((event, corpus, self.key, self.feature_set, hac))
-#            
-#        
+            
         n_procs = kwargs.get(u'n_procs', 1)
         n_jobs = len(jobs)
         #pool = Pool(n_procs)
@@ -253,12 +247,6 @@ class PipelineJob(MultiProcessWorker):
         #for result in pool.imap_unordered(sum_worker, jobs):
         #    pb.update()
 #
-#        import sys
-#        sys.exit()
-
-#
-#            import sys
-#            sys.exit()
 
     def check_resource_pipeline(self, event, corpus, **kwargs):
         sfeats = \
@@ -317,24 +305,43 @@ def sum_worker(job_queue, result_queue, **kwargs):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     while not job_queue.empty():
         try:
-            event, corpus, prefix, feature_set, summarizer = \
-                job_queue.get(block=False)
-            try:
-                tsv_path = summarizer.get_tsv_path(event, prefix, feature_set)
-                if not os.path.exists(tsv_path):
-                    summarizer.make_summary(event, corpus, prefix, feature_set)
-            except Exception as e:
-                #exc_type, exc_obj, exc_tb = sys.exc_info()
-                #fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                #print(exc_type, fname, exc_tb.tb_lineno)
-                exc_type, exc_value, exc_traceback = sys.exc_info()
-                print "*** print_tb:"
-                traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
-                print "*** print_exception:"
-                traceback.print_exception(exc_type, exc_value, exc_traceback,
-                                          limit=15, file=sys.stdout)
-            finally:
-                result_queue.put(None)
+            args = job_queue.get(block=False)
+            if isinstance(args[4], HACSummarizer):
+                event, corpus, prefix, feature_set, summarizer, cutoff = args
+                try:
+                    tsv_path = summarizer.get_tsv_path(
+                        event, cutoff)
+                    if not os.path.exists(tsv_path):
+                        summarizer.make_summary(
+                            event, corpus, prefix, feature_set, cutoff)
+
+                except Exception as e:
+                    exc_type, exc_value, exc_traceback = sys.exc_info()
+                    print "*** print_tb:"
+                    traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+                    print "*** print_exception:"
+                    traceback.print_exception(exc_type, exc_value, 
+                        exc_traceback, limit=15, file=sys.stdout)
+                finally:
+                    result_queue.put(None)
+
+            else:
+                event, corpus, prefix, feature_set, summarizer = args
+                try:
+                    tsv_path = summarizer.get_tsv_path(
+                        event, prefix, feature_set)
+                    if not os.path.exists(tsv_path):
+                        summarizer.make_summary(
+                            event, corpus, prefix, feature_set)
+                except Exception as e:
+                    exc_type, exc_value, exc_traceback = sys.exc_info()
+                    print "*** print_tb:"
+                    traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+                    print "*** print_exception:"
+                    traceback.print_exception(exc_type, exc_value, 
+                        exc_traceback, limit=15, file=sys.stdout)
+                finally:
+                    result_queue.put(None)
         except Queue.Empty:
             pass
     return True 
