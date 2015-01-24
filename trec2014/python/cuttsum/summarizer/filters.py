@@ -193,12 +193,13 @@ class HACFilteredSummary(object):
         if not os.path.exists(self.dir_):
             os.makedirs(self.dir_)
 
-    def get_tsv_path(self, event, dist_cutoff):
+    def get_tsv_path(self, event, dist_cutoff, cthr):
         return os.path.join(self.dir_,
-            "hac-{}-dist{}.tsv".format(event.fs_name(), dist_cutoff))
+            "hac-{}-dist{}-cthr{}.tsv".format(
+                event.fs_name(), dist_cutoff, cthr))
 
-    def get_dataframe(self, event, dist_cutoff):
-        tsv = self.get_tsv_path(event, dist_cutoff)
+    def get_dataframe(self, event, dist_cutoff, cthr):
+        tsv = self.get_tsv_path(event, dist_cutoff, cthr)
         if not os.path.exists(tsv):
             return None
         else:
@@ -210,10 +211,12 @@ class HACFilteredSummary(object):
                               'sentence id', 'timestamp', 'conf', 'text']
             return df
 
-    def make(self, event, min_cluster_size=2, sim_threshold=.2264,
-             dist_cutoff=1.35):
-        tsv_path = self.get_tsv_path(event, dist_cutoff)
+    def make(self, event, prefix, feature_set,
+             min_cluster_size=2, sim_threshold=.2264,
+             dist_cutoff=1.35, center_threshold=1.0):
+        tsv_path = self.get_tsv_path(event, dist_cutoff, center_threshold)
         lvecs = SentenceLatentVectorsResource()
+        spa = SaliencePredictionAggregator()
         hac = HACSummarizer()
         cluster_df = hac.get_dataframe(event, dist_cutoff)
        #for _, row in cluster_df.iterrows():
@@ -225,8 +228,27 @@ class HACFilteredSummary(object):
             hour = datetime.utcfromtimestamp(timestamp) - timedelta(hours=1)
             lvec_df = lvecs.get_dataframe(event, hour)
             lvec_df.drop_duplicates(['stream id', 'sentence id'], inplace=True)
+            
+            sal_df = spa.get_dataframe(event, hour, prefix, feature_set)       
+            sal_df.drop_duplicates(['stream id', 'sentence id'], inplace=True)
+            
             clusters = cluster_df[cluster_df['timestamp'] == timestamp].copy()
             clusters.sort(['stream id', 'sentence id'], inplace=True)
+
+            salience = []
+            for _, row in clusters.iterrows():
+                sal_pred = sal_df.loc[
+                    (sal_df['stream id'] == row['stream id']) & \
+                    (sal_df['sentence id'] == row['sentence id'])
+                    ].as_matrix()[:,2:].astype(np.float64).mean()
+                salience.append(sal_pred)
+            clusters['salience'] = salience
+            clusters.sort(['salience'], ascending=False, inplace=True)
+
+            sal_mean = np.mean(salience)
+            sal_std = np.std(salience)
+
+
             for _, row in clusters.iterrows():
                 if row['cluster size'] < min_cluster_size:
                     continue   
@@ -234,6 +256,11 @@ class HACFilteredSummary(object):
                     (lvec_df['stream id'] == row['stream id']) & \
                     (lvec_df['sentence id'] == row['sentence id'])
                     ].as_matrix()[:,2:].astype(np.float64)
+
+                sal_norm = (row['salience'] - sal_mean) / sal_std
+                if sal_norm < center_threshold:
+                    continue
+
                 if Xcache is None:
                     Xcache = vec
                 else:
@@ -244,11 +271,12 @@ class HACFilteredSummary(object):
                 updates.append({
                     'query id': event.query_id[5:],
                     'system id': 'cunlp',
-                    'run id': 'hac',
+                    'run id': 'hac-d{}-c{}'.format(
+                        dist_cutoff, center_threshold),
                     'stream id': row['stream id'], 
                     'sentence id': row['sentence id'],
                     'timestamp': timestamp,
-                    'conf': 1.0,
+                    'conf': row['salience'],
                     'string': row['string']
                 })
 

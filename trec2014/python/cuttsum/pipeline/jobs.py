@@ -225,9 +225,9 @@ class PipelineJob(MultiProcessWorker):
             if not os.path.exists(hac.dir_):
                 os.makedirs(hac.dir_)
 
-            #for cutoff in np.arange(1.00, 2., .05):
-            #    jobs.append(
-            #        (event, corpus, self.key, self.feature_set, hac, cutoff))
+            for cutoff in np.arange(.9, 2.5, .05):
+                jobs.append(
+                    (event, corpus, self.key, self.feature_set, hac, cutoff))
             
             jobs.append((event, corpus, self.key, self.feature_set, ap))
             jobs.append((event, corpus, self.key, self.feature_set, apsal))

@@ -155,9 +155,17 @@ class HACSummarizer(object):
                 ii = II[clusters == cluster]
                 #print ii.shape
                 C = X[clusters == cluster,:]
-                Cs = s[clusters == cluster]
-                e = ii[np.argmax(Cs)],
-                cluster_size = Cs.shape[0]
+
+                u = np.mean(C, axis=0)
+                dist_2 = np.sum((C - u)**2, axis=1)
+                cidx = np.argmin(dist_2)
+                #cidx = np.argmax(cosine_similarity(C, u))
+                e = ii[cidx]
+#
+                                
+#Cs = s[clusters == cluster]
+#                e = ii[np.argmax(Cs)],
+                cluster_size = C.shape[0]
 
                 scstring = string_df.iloc[e][u'streamcorpus']
                 stream_id = string_df.iloc[e][u'stream id']

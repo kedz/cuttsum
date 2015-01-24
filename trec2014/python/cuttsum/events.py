@@ -37,6 +37,7 @@ def get_events(event_xml, by_query_ids=None, by_event_types=None, prefix=''):
             if isinstance(query, str):
                 query = query.decode(u'utf-8')
             query = tuple(query.split(u' '))
+            wiki = elem.findtext('description')
         
             start = datetime.utcfromtimestamp(int(elem.findtext('start')))
             end = datetime.utcfromtimestamp(int(elem.findtext('end')))
@@ -44,25 +45,26 @@ def get_events(event_xml, by_query_ids=None, by_event_types=None, prefix=''):
             if by_query_ids is not None:
                 if query_id in by_query_ids:
                     ts_events.append(
-                        Event(query_id, title, event_type, query, start, end))
+                        Event(query_id, title, event_type, query, start, end, wiki))
             elif by_event_types is not None:
                 if event_type in by_event_types:
                     ts_events.append(
-                        Event(query_id, title, event_type, query, start, end))
+                        Event(query_id, title, event_type, query, start, end, wiki))
             else:
                 ts_events.append(
-                    Event(query_id, title, event_type, query, start, end))
+                    Event(query_id, title, event_type, query, start, end, wiki))
 
     return ts_events
 
 class Event:
-    def __init__(self, query_id, title, type, query, start, end):
+    def __init__(self, query_id, title, type, query, start, end, wiki):
         self.query_id = query_id
         self.title = title
         self.type = type
         self.query = query
         self.start = start
         self.end = end
+        self.wiki = wiki
 
     def fs_name(self):
         title = re.sub(r'[(){}\[\]]', r'', self.title)

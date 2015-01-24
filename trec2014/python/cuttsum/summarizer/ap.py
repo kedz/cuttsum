@@ -83,6 +83,41 @@ class APSummarizer(object):
 
             lvec_df.reset_index(drop=True, inplace=True) 
             string_df.reset_index(drop=True, inplace=True) 
+
+            string_df.drop_duplicates(subset=['streamcorpus'], inplace=True)
+            string_df['update id'] = string_df['stream id'].map(str) + "-" + \
+                string_df['sentence id'].map(str)
+            good_uids = set(string_df['update id'].tolist())
+            
+            lvec_df['update id'] = lvec_df['stream id'].map(str) + "-" + \
+                lvec_df['sentence id'].map(str)
+            lvec_df = lvec_df[lvec_df['update id'].isin(good_uids)].copy()
+
+            #sal_df['update id'] = sal_df['stream id'].map(str) + "-" + \
+            #    sal_df['sentence id'].map(str)
+            #sal_df = sal_df[sal_df['update id'].isin(good_uids)].copy()
+            
+            string_df.sort([u"stream id", u"sentence id"], inplace=True)
+            lvec_df.sort([u"stream id", u"sentence id"], inplace=True)
+            #sal_df.sort([u"stream id", u"sentence id"], inplace=True)
+
+            lvec_df.reset_index(drop=True, inplace=True) 
+            string_df.reset_index(drop=True, inplace=True) 
+            #sal_df.reset_index(drop=True, inplace=True) 
+
+            n_sents = len(string_df)
+                               
+            for i in xrange(n_sents):
+                assert string_df[u'stream id'].iloc[i] == \
+                    lvec_df[u'stream id'].iloc[i]
+                #assert string_df[u'stream id'].iloc[i] == \
+                #    sal_df[u'stream id'].iloc[i]
+                assert string_df[u'sentence id'].iloc[i] == \
+                    lvec_df[u'sentence id'].iloc[i]
+                #assert string_df[u'sentence id'].iloc[i] == \
+                #    sal_df[u'sentence id'].iloc[i]
+
+
             good_rows = []
             for name, doc in string_df.groupby("stream id"):
                 for rname, row in doc.iterrows():
@@ -116,6 +151,8 @@ class APSummarizer(object):
                 assert string_df[u'sentence id'].iloc[i] == \
                     lvec_df[u'sentence id'].iloc[i]
  
+            del lvec_df['update id'] 
+            #del sal_df['update id'] 
             X = lvec_df.as_matrix()[:,2:].astype(np.float64)    
             A = cosine_similarity(X)
             Aupper = A[np.triu_indices_from(A, k=1)]
