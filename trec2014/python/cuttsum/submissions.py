@@ -90,3 +90,13 @@ def get_2014_sampled_updates_levenshtein():
 
     return df
 
+def get_2015_amt_updates():
+    updates_tsv = resource_filename(
+        u'cuttsum', os.path.join(u'2015-data', u'amt-updates.tsv.gz'))
+ 
+    with gzip.open(updates_tsv, u'r') as f:
+        df = pd.io.parsers.read_csv(
+            f, sep='\t', quoting=3, header=0,
+            names=[u'query id', u'update id', u'document id',
+                   u'sentence id', u'length', u'duplicate id', u'text'])
+    return df
