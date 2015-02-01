@@ -59,6 +59,7 @@ def get_events(event_xml, by_query_ids=None, by_event_types=None, prefix=''):
 class Event:
     def __init__(self, query_id, title, type, query, start, end, wiki):
         self.query_id = query_id
+        self.query_num = int(query_id.split('.')[1])
         self.title = title
         self.type = type
         self.query = query
