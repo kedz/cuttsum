@@ -115,14 +115,25 @@ def job_generator(event_selector, feature_selector,
 
 class PipelineJob(MultiProcessWorker):
     def __init__(self, key, description, 
-        event_data, feature_set):
+        event_data, feature_set, seed=42):
         
         self.key = key
         self.description = description
         self.event_data = event_data
-        #self.training_data = training_data
-        #self.testing_data = testing_data
         self.feature_set = feature_set
+        self.seed_ = seed
+
+    def dev_events(self):
+        ed = list(self.event_data)
+        random.seed(self.seed_)
+        random.shuffle(ed)
+        return sorted(ed[0:3], key=lambda x: x[0].query_num)
+
+    def eval_events(self):
+        ed = list(self.event_data)
+        random.seed(self.seed_)
+        random.shuffle(ed)
+        return sorted(ed[3:], key=lambda x: x[0].query_num)
 
     def __str__(self):
         return unicode(self).encode(u'utf-8')
@@ -215,22 +226,61 @@ class PipelineJob(MultiProcessWorker):
 #
         print "running summarizer jobs..."
         jobs = []
-        for event, corpus in self.event_data:
 
+        import random
+        random.seed(42)
+        random.shuffle(self.event_data)
+        dev_events = self.event_data[0:3]
+        eval_events = self.event_data[3:]
+
+
+        if 'ablation' in self.key:
+            print "I am here"
+            for event, corpus in eval_events:
+                print event.fs_name()
+                jobs.append((event, corpus, self.key, self.feature_set, apsal))
             apsal_tsv_dir = apsal.get_tsv_dir(self.key, self.feature_set)
             if not os.path.exists(apsal_tsv_dir):
                 os.makedirs(apsal_tsv_dir)
-            if not os.path.exists(ap.dir_):
-                os.makedirs(ap.dir_)        
-            if not os.path.exists(hac.dir_):
-                os.makedirs(hac.dir_)
 
-            for cutoff in np.arange(.9, 2.5, .05):
-                jobs.append(
-                    (event, corpus, self.key, self.feature_set, hac, cutoff))
-            
-            jobs.append((event, corpus, self.key, self.feature_set, ap))
-            jobs.append((event, corpus, self.key, self.feature_set, apsal))
+        elif 'cross' in self.key:
+            for event, corpus in dev_events:
+                print event.fs_name()
+                apsal_tsv_dir = apsal.get_tsv_dir(self.key, self.feature_set)
+                if not os.path.exists(apsal_tsv_dir):
+                    os.makedirs(apsal_tsv_dir)
+                if not os.path.exists(ap.dir_):
+                    os.makedirs(ap.dir_)        
+                if not os.path.exists(hac.dir_):
+                    os.makedirs(hac.dir_)
+
+                for cutoff in np.arange(.9, 5.05, .05):
+                    jobs.append(
+                        (event, corpus, self.key, self.feature_set, hac, cutoff))
+                
+                jobs.append((event, corpus, self.key, self.feature_set, ap))
+                jobs.append((event, corpus, self.key, self.feature_set, apsal))
+
+            for event, corpus in eval_events:
+                print event.fs_name()
+                apsal_tsv_dir = apsal.get_tsv_dir(self.key, self.feature_set)
+                if not os.path.exists(apsal_tsv_dir):
+                    os.makedirs(apsal_tsv_dir)
+                if not os.path.exists(ap.dir_):
+                    os.makedirs(ap.dir_)        
+                if not os.path.exists(hac.dir_):
+                    os.makedirs(hac.dir_)
+
+                for cutoff in np.arange(.9, 5.05, .1):
+                    jobs.append(
+                        (event, corpus, self.key,
+                         self.feature_set, hac, cutoff))
+                
+                jobs.append((event, corpus, self.key, self.feature_set, ap))
+                jobs.append((event, corpus, self.key, self.feature_set, apsal))
+
+
+
             
         n_procs = kwargs.get(u'n_procs', 1)
         n_jobs = len(jobs)
