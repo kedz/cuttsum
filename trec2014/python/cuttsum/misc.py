@@ -1,5 +1,6 @@
 import sys
 from functools import reduce
+import re
 
 class ProgressBar:
     def __init__(self, max_jobs):
@@ -120,3 +121,19 @@ def stringify_corenlp_sentence(sentence):
             normalized_tokens.append(
                 u'__{}__'.format(token.ne.lower()))
     return (u' '.join(normalized_tokens)).encode(u'utf-8')
+
+def passes_simple_filter(scstring, doclen):
+    words = len(re.findall(r'\b[^\W\d_]+\b', scstring))
+    socs = len(re.findall(
+        r'Digg|del\.icio\.us|Facebook|Kwoff|Myspace',
+        scstring))  
+    langs = len(re.findall(
+        r'Flash|JavaScript|CSS', scstring, re.I))
+
+    if words > 9 and doclen < 200 \
+        and socs < 2 and langs < 2:
+        
+        return True
+    else:
+        return False
+    
