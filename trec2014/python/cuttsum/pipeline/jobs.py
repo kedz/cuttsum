@@ -1,14 +1,16 @@
 import cuttsum
 import random
-from .representation import SalienceFeatureSet
-from .salience import SalienceModels, SaliencePredictions, \
+from cuttsum.pipeline.representation import SalienceFeatureSet
+from cuttsum.salience import SalienceModels, SaliencePredictions, \
     SaliencePredictionAggregator
 from cuttsum.summarizer.baseline import HACSummarizer
 from cuttsum.summarizer.ap import APSummarizer, APSalienceSummarizer
+from cuttsum.summarizer.filters import APFilteredSummary, \
+    APSalienceFilteredSummary, HACFilteredSummary
 import os
 from multiprocessing import Pool
-from ..misc import ProgressBar
-from ..data import MultiProcessWorker
+from cuttsum.misc import ProgressBar
+from cuttsum.data import MultiProcessWorker
 import signal
 import Queue
 import sys
@@ -172,66 +174,61 @@ class PipelineJob(MultiProcessWorker):
 
     def start(self, **kwargs):
 
-        
-#        training_data = []
-        print "  checking resources and models"
-        print "  ============================="
-        for event, corpus in self.event_data:
-                       
-            print event.fs_name(), corpus.fs_name()
-            has_all_resources = self.check_resource_pipeline(
-                event, corpus, **kwargs)
-            if not has_all_resources:
-                self.run_resource_pipeline(event, corpus, **kwargs)
-
-            print  "+  resource dependency checks met!"
-            
-            has_all_models = self.check_model_pipeline(
-                event, corpus, self.feature_set, **kwargs)
-            if not has_all_models:
-                self.train_models(event, corpus, self.feature_set, **kwargs)
-
-            print  "+  model dependency checks met!"
-
-
-        print "  checking predictions"
-        print "  ============================="
-
-        model_events = set(event for event, corpus in self.event_data)
-        for event, corpus in self.event_data:
- 
-            print event.fs_name(), "/", corpus.fs_name()
-            has_all_predictions = self.check_model_predictions(
-                event, corpus, self.feature_set,
-                self.key, model_events - set([event]), **kwargs)
-            if not has_all_predictions:
-                self.predict_salience(event, corpus, self.feature_set,
-                                      self.key, model_events - set([event]), 
-                                      **kwargs)
-            print  "+  model prediction checks met!"
-
-            spg = SaliencePredictionAggregator()
-            cov = spg.check_coverage(
-                event, corpus, self.feature_set,
-                self.key, model_events - set([event]), **kwargs)
-            if cov != 1:
-                spg.get(event, corpus, self.feature_set,
-                        self.key, model_events - set([event]), **kwargs)
-            print "+  model predictions aggregated!"
+#        print "  checking resources and models"
+#        print "  ============================="
+#        for event, corpus in self.event_data:
+#                       
+#            print event.fs_name(), corpus.fs_name()
+#            has_all_resources = self.check_resource_pipeline(
+#                event, corpus, **kwargs)
+#            if not has_all_resources:
+#                self.run_resource_pipeline(event, corpus, **kwargs)
 #
-#   
-        ap = APSummarizer() 
-        apsal = APSalienceSummarizer()
-        hac = HACSummarizer()
+#            print  "+  resource dependency checks met!"
+#            
+#            has_all_models = self.check_model_pipeline(
+#                event, corpus, self.feature_set, **kwargs)
+#            if not has_all_models:
+#                self.train_models(event, corpus, self.feature_set, **kwargs)
 #
+#            print  "+  model dependency checks met!"
+#
+#
+#        print "  checking predictions"
+#        print "  ============================="
+#
+#        model_events = set(event for event, corpus in self.event_data)
+#        for event, corpus in self.event_data:
+# 
+#            print event.fs_name(), "/", corpus.fs_name()
+#            has_all_predictions = self.check_model_predictions(
+#                event, corpus, self.feature_set,
+#                self.key, model_events - set([event]), **kwargs)
+#            if not has_all_predictions:
+#                self.predict_salience(event, corpus, self.feature_set,
+#                                      self.key, model_events - set([event]), 
+#                                      **kwargs)
+#            print  "+  model prediction checks met!"
+#
+#            spg = SaliencePredictionAggregator()
+#            cov = spg.check_coverage(
+#                event, corpus, self.feature_set,
+#                self.key, model_events - set([event]), **kwargs)
+#            if cov != 1:
+#                spg.get(event, corpus, self.feature_set,
+#                        self.key, model_events - set([event]), **kwargs)
+#            print "+  model predictions aggregated!"
+##
+##   
+##
         print "running summarizer jobs..."
         jobs = []
 
-        import random
-        random.seed(42)
-        random.shuffle(self.event_data)
-        dev_events = self.event_data[0:3]
-        eval_events = self.event_data[3:]
+        #import random
+        #random.seed(42)
+        #random.shuffle(self.event_data)
+        dev_events = self.dev_events()
+        eval_events = self.eval_events()
 
 
         if 'ablation' in self.key:
@@ -244,53 +241,44 @@ class PipelineJob(MultiProcessWorker):
                 os.makedirs(apsal_tsv_dir)
 
         elif 'cross' in self.key:
-            for event, corpus in dev_events:
-                print event.fs_name()
-                apsal_tsv_dir = apsal.get_tsv_dir(self.key, self.feature_set)
-                if not os.path.exists(apsal_tsv_dir):
-                    os.makedirs(apsal_tsv_dir)
-                if not os.path.exists(ap.dir_):
-                    os.makedirs(ap.dir_)        
-                if not os.path.exists(hac.dir_):
-                    os.makedirs(hac.dir_)
+            if kwargs.get(u'tune', False) is True:
+                self.tune(dev_events, self.key, self.feature_set, **kwargs)
 
-                for cutoff in np.arange(.9, 5.05, .05):
-                    jobs.append(
-                        (event, corpus, self.key, self.feature_set, hac, cutoff))
-                
-                jobs.append((event, corpus, self.key, self.feature_set, ap))
-                jobs.append((event, corpus, self.key, self.feature_set, apsal))
+            else:
+                print "This is tmp, dying here"
+                import sys
+                sys.exit()
 
-            for event, corpus in eval_events:
-                print event.fs_name()
-                apsal_tsv_dir = apsal.get_tsv_dir(self.key, self.feature_set)
-                if not os.path.exists(apsal_tsv_dir):
-                    os.makedirs(apsal_tsv_dir)
-                if not os.path.exists(ap.dir_):
-                    os.makedirs(ap.dir_)        
-                if not os.path.exists(hac.dir_):
-                    os.makedirs(hac.dir_)
+                for event, corpus in eval_events:
+                    print event.fs_name()
+                    apsal_tsv_dir = apsal.get_tsv_dir(self.key, self.feature_set)
+                    if not os.path.exists(apsal_tsv_dir):
+                        os.makedirs(apsal_tsv_dir)
+                    if not os.path.exists(ap.dir_):
+                        os.makedirs(ap.dir_)        
+                    if not os.path.exists(hac.dir_):
+                        os.makedirs(hac.dir_)
 
-                for cutoff in np.arange(.9, 5.05, .1):
-                    jobs.append(
-                        (event, corpus, self.key,
-                         self.feature_set, hac, cutoff))
-                
-                jobs.append((event, corpus, self.key, self.feature_set, ap))
-                jobs.append((event, corpus, self.key, self.feature_set, apsal))
+                    for cutoff in np.arange(.9, 5.05, .1):
+                        jobs.append(
+                            (event, corpus, self.key,
+                             self.feature_set, hac, cutoff))
+                    
+                    jobs.append((event, corpus, self.key, self.feature_set, ap))
+                    jobs.append((event, corpus, self.key, self.feature_set, apsal))
 
 
 
             
-        n_procs = kwargs.get(u'n_procs', 1)
-        n_jobs = len(jobs)
+##        n_procs = kwargs.get(u'n_procs', 1)
+#        n_jobs = len(jobs)
         #pool = Pool(n_procs)
         #pb = ProgressBar(n_jobs)
 #        for job in jobs:
 #            sum_worker(job)
        
-        jobs.reverse() 
-        self.do_work(sum_worker, jobs, **kwargs)
+ #       jobs.reverse() 
+  #      self.do_work(sum_worker, jobs, **kwargs)
         #for job in jobs:
         #    sum_worker(job)
         #    pb.update()
@@ -351,7 +339,95 @@ class PipelineJob(MultiProcessWorker):
                                             key, model_events, **kwargs):
             raise Exception("Model prediction failed!") 
 
-def sum_worker(job_queue, result_queue, **kwargs):
+    def tune(self, dev_data, prefix, feature_set, 
+             hac_dist_min=.9, hac_dist_max=5.05, hac_dist_step=.05, 
+             sal_min=-2.0, sal_max=2.0, sal_step=.1,
+             sem_sim_min=.2, sem_sim_max=.75, sem_sim_step=.05, **kwargs): 
+
+        ap = APSummarizer() 
+        apsal = APSalienceSummarizer()
+        hac = HACSummarizer()
+
+        hac_dist_cutoffs = np.arange(
+            hac_dist_min, hac_dist_max + hac_dist_step, hac_dist_step)
+        sal_cutoffs = np.arange(
+            sal_min, sal_max + sal_step, sal_step)
+        sem_sim_cutoffs = np.arange(
+            sem_sim_min, sem_sim_max + sem_sim_step, sem_sim_step)
+
+        print "Tuning on dev data."
+        
+        ### Run clustering ###
+        print "Generating AP Cluster\n\t(no params)"
+        print "Generating AP+Salience Cluster\n\t(no params)"
+        print "Generating HAC Cluster"
+        print "\tDist Threshold ({}, {}), step={} {} jobs/event".format(
+            hac_dist_min, hac_dist_max, hac_dist_step,
+            hac_dist_cutoffs.shape[0])
+
+        jobs = []                        
+        for event, corpus in dev_data:
+            print event.fs_name()
+            apsal_tsv_dir = apsal.get_tsv_dir(prefix, feature_set)
+            if not os.path.exists(apsal_tsv_dir):
+                os.makedirs(apsal_tsv_dir)
+            if not os.path.exists(ap.dir_):
+                os.makedirs(ap.dir_)        
+            if not os.path.exists(hac.dir_):
+                os.makedirs(hac.dir_)
+
+            for cutoff in hac_dist_cutoffs:
+                jobs.append(
+                    (event, corpus, prefix, feature_set, hac, cutoff))   
+            jobs.append((event, corpus, prefix, feature_set, ap))
+            jobs.append((event, corpus, prefix, feature_set, apsal))
+
+        self.do_work(cluster_worker, jobs, **kwargs)
+
+        ### Run filtering ###
+        print 
+        print "Generating AP Summary"
+        print "\tSim Threshold ({}, {}), step={}".format(
+            sem_sim_min, sem_sim_max, sem_sim_step)
+        print "\t{} jobs/event".format(
+            sem_sim_cutoffs.shape[0])
+        print "Generating AP+Salience Summary"
+        print "\tSal Threshold ({}, {}), step={}".format(
+            sal_min, sal_max, sal_step)
+        print "\tSim Threshold ({}, {}), step={}".format(
+            sem_sim_min, sem_sim_max, sem_sim_step)
+        print "\t{} jobs/event".format(
+            sal_cutoffs.shape[0] * sem_sim_cutoffs.shape[0])
+        print "Generating HAC Summary"
+        print "\tDist Threshold ({}, {}), step={}".format(
+            hac_dist_min, hac_dist_max, hac_dist_step)
+        print "\tSim Threshold ({}, {}), step={}".format(
+            sem_sim_min, sem_sim_max, sem_sim_step)
+        print "\t{} jobs/event".format(
+            hac_dist_cutoffs.shape[0] * sem_sim_cutoffs.shape[0])
+
+        jobs = []
+        dev_data = dev_data[0:1]
+        for event, corpus in dev_data:
+            for sem_sim_cutoff in sem_sim_cutoffs:
+                    
+                for dist_cutoff in hac_dist_cutoffs:
+                    jobs.append(
+                        (HACFilteredSummary(), 
+                        (event, prefix, feature_set,
+                         dist_cutoff, sem_sim_cutoff)))
+        
+                jobs.append(
+                    (APFilteredSummary(), (event, sem_sim_cutoff)))
+                for sal_cutoff in sal_cutoffs:
+                    jobs.append(
+                        (APSalienceFilteredSummary(), 
+                        (event, prefix, feature_set, sal_cutoff,
+                         sem_sim_cutoff)))
+        jobs.reverse()
+        self.do_work(filter_worker, jobs, **kwargs)
+  
+def cluster_worker(job_queue, result_queue, **kwargs):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     while not job_queue.empty():
         try:
@@ -396,3 +472,55 @@ def sum_worker(job_queue, result_queue, **kwargs):
             pass
     return True 
 
+
+def filter_worker(job_queue, result_queue, **kwargs):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    while not job_queue.empty():
+        try:
+            summarizer, sum_args = job_queue.get(block=False)
+
+            if isinstance(summarizer, APFilteredSummary):
+                event, sim_cutoff = sum_args
+                ap = APSummarizer()
+                ap_tsv_path = ap.get_tsv_path(event)
+                apf_tsv_path = summarizer.get_tsv_path(event, sim_cutoff)
+                if os.path.exists(ap_tsv_path) and \
+                    not os.path.exists(apf_tsv_path):
+                    summarizer.make(event, sim_threshold=sim_cutoff)        
+
+            elif isinstance(summarizer, HACFilteredSummary):
+                event, prefix, feature_set, dist_cutoff, sim_cutoff = sum_args
+                hac = HACSummarizer()
+                hac_tsv_path = hac.get_tsv_path(event, dist_cutoff)
+                hacf_tsv_path = summarizer.get_tsv_path(
+                    event, dist_cutoff, sim_cutoff)
+                if os.path.exists(hac_tsv_path) and \
+                    not os.path.exists(hacf_tsv_path):
+                    
+                    try:
+                        summarizer.make(event, prefix, feature_set, 
+                                        dist_cutoff=dist_cutoff,
+                                        sim_threshold=sim_cutoff)
+                    except Exception, e:
+                        print e
+                        print hac_tsv_path
+
+            elif isinstance(summarizer, APSalienceFilteredSummary):
+                event, prefix, feature_set, sal_cutoff, sim_cutoff = sum_args
+                aps = APSalienceSummarizer()
+                aps_tsv_path = aps.get_tsv_path(event, prefix, feature_set)
+                apsf_tsv_path = summarizer.get_tsv_path(
+                    event, prefix, feature_set, sal_cutoff, sim_cutoff)
+                if os.path.exists(aps_tsv_path) and \
+                    not os.path.exists(apsf_tsv_path):
+                    summarizer.make(
+                        event, prefix, feature_set,
+                        center_threshold=sal_cutoff,
+                        sim_threshold=sim_cutoff)
+
+
+            
+            result_queue.put(None)
+        except Queue.Empty:
+            pass
+    return True 

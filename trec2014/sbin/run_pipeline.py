@@ -211,7 +211,11 @@ def run_summarizer_jobs(feature_ablation=False, cross_fold=False, **kwargs):
 
     from cuttsum.pipeline.salience import SalienceModels
     if feature_ablation:
-        for job in jobs.feature_ablation_jobs(u'feature-ablation'):
+        for jnum, job in enumerate(
+            jobs.feature_ablation_jobs(u'feature-ablation')):
+
+            if jnum != 2: 
+                continue
             print job
             job.start(**kwargs)
 
@@ -342,6 +346,10 @@ if __name__ == u'__main__':
     parser.add_argument(u'--sample-size', type=int,
                         help=u'Sample size of salience models',
                         default=100, required=False)
+
+    parser.add_argument(u'--tune', action=u'store_true', dest=u'tune',
+                        default=False, 
+                        help=u'Find optimal settings on dev set.')
 
 
     args = parser.parse_args()
