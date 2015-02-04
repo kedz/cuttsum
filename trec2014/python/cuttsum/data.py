@@ -39,10 +39,16 @@ def _init_resource_manager():
             continue
         if module_name == "cuttsum.pipeline.representation":
             continue
+        if module_name == "cuttsum.pipeline.jobs":
+            continue
+        if module_name == "cuttsum.summarizer":
+            continue
         if module_name == "cuttsum.summarizer.baseline":
             continue
         if module_name == "cuttsum.summarizer.ap":
             continue
+        if module_name == "cuttsum.summarizer.filters":
+            continue 
         module = loader.find_module(module_name).load_module(module_name)
         clsmembers = inspect.getmembers(
             sys.modules[module.__name__],

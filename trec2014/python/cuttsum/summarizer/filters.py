@@ -1,4 +1,3 @@
-import cuttsum.pipeline.jobs as jobs
 from cuttsum.sentsim import SentenceLatentVectorsResource
 from cuttsum.summarizer.ap import APSummarizer, APSalienceSummarizer
 from cuttsum.summarizer.baseline import HACSummarizer
@@ -7,7 +6,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from sklearn.metrics.pairwise import cosine_similarity
-from cuttsum.pipeline.salience import SaliencePredictionAggregator
+from cuttsum.salience import SaliencePredictionAggregator
 
 class APFilteredSummary(object):
     def __init__(self):
@@ -16,12 +15,12 @@ class APFilteredSummary(object):
         if not os.path.exists(self.dir_):
             os.makedirs(self.dir_)
 
-    def get_tsv_path(self, event, prefix=None, feature_set=None):
+    def get_tsv_path(self, event, sim_cutoff, prefix=None, feature_set=None):
         return os.path.join(self.dir_,
-            "ap-{}.tsv".format(event.fs_name()))
+            "ap-{}-sim_{}.tsv".format(event.fs_name(), sim_cutoff))
 
-    def get_dataframe(self, event):
-        tsv = self.get_tsv_path(event)
+    def get_dataframe(self, event, sim_cutoff):
+        tsv = self.get_tsv_path(event, sim_cutoff)
         if not os.path.exists(tsv):
             return None
         else:
@@ -33,7 +32,7 @@ class APFilteredSummary(object):
             return df
 
     def make(self, event, min_cluster_size=2, sim_threshold=.2264):
-        tsv_path = self.get_tsv_path(event)
+        tsv_path = self.get_tsv_path(event, sim_threshold)
         lvecs = SentenceLatentVectorsResource()
         ap = APSummarizer()
         cluster_df = ap.get_dataframe(event)
@@ -48,6 +47,9 @@ class APFilteredSummary(object):
             lvec_df.drop_duplicates(['stream id', 'sentence id'], inplace=True)
             clusters = cluster_df[cluster_df['timestamp'] == timestamp].copy()
             clusters.sort(['stream id', 'sentence id'], inplace=True)
+            
+
+
             for _, row in clusters.iterrows():
                 if row['cluster size'] < min_cluster_size:
                     continue   
@@ -64,7 +66,7 @@ class APFilteredSummary(object):
                 updates.append({
                     'query id': event.query_id[5:],
                     'system id': 'cunlp',
-                    'run id': 'ap',
+                    'run id': 'ap-sim_{}'.format(sim_threshold),
                     'stream id': row['stream id'], 
                     'sentence id': row['sentence id'],
                     'timestamp': timestamp,
@@ -93,13 +95,16 @@ class APSalienceFilteredSummary(object):
     def get_tsv_dir(self, prefix, feature_set):
         return os.path.join(self.dir_, prefix + "." + feature_set.fs_name())
 
-    def get_tsv_path(self, event, prefix, feature_set, cthr):
+    def get_tsv_path(self, event, prefix, feature_set, sal_cutoff, sim_cutoff):
         tsv_dir = self.get_tsv_dir(prefix, feature_set)
         return os.path.join(tsv_dir,
-            "ap-sal-{}-thr{}.tsv".format(event.fs_name(), cthr))
+            "ap-sal-{}-sal_{}-sim_{}.tsv".format(
+                event.fs_name(), sal_cutoff, sim_cutoff))
 
-    def get_dataframe(self, event, prefix, feature_set, cthr):
-        tsv = self.get_tsv_path(event, prefix, feature_set, cthr)
+    def get_dataframe(self, event, prefix, feature_set, 
+                      sal_cutoff, sim_cutoff):
+        tsv = self.get_tsv_path(
+            event, prefix, feature_set, sal_cutoff, sim_cutoff)
         if not os.path.exists(tsv):
             return None
         else:
@@ -114,7 +119,7 @@ class APSalienceFilteredSummary(object):
     def make(self, event, prefix, feature_set, 
              min_cluster_size=2, sim_threshold=.2264, center_threshold=1.0):
         tsv_path = self.get_tsv_path(event, prefix, feature_set,
-            center_threshold)
+            center_threshold, sim_threshold)
         lvecs = SentenceLatentVectorsResource()
         spa = SaliencePredictionAggregator()
         apsal = APSalienceSummarizer()
@@ -169,7 +174,8 @@ class APSalienceFilteredSummary(object):
                 updates.append({
                     'query id': event.query_id[5:],
                     'system id': 'cunlp',
-                    'run id': 'apsal.{}'.format(center_threshold),
+                    'run id': 'apsal-sal_{}-sim_{}'.format(
+                        center_threshold, sim_threshold),
                     'stream id': row['stream id'], 
                     'sentence id': row['sentence id'],
                     'timestamp': timestamp,
@@ -193,13 +199,13 @@ class HACFilteredSummary(object):
         if not os.path.exists(self.dir_):
             os.makedirs(self.dir_)
 
-    def get_tsv_path(self, event, dist_cutoff):
+    def get_tsv_path(self, event, dist_cutoff, sim_cutoff):
         return os.path.join(self.dir_,
-            "hac-{}-dist{}.tsv".format(
-                event.fs_name(), dist_cutoff))
+            "hac-{}-dist_{}-sim_{}.tsv".format(
+                event.fs_name(), dist_cutoff, sim_cutoff))
 
-    def get_dataframe(self, event, dist_cutoff):
-        tsv = self.get_tsv_path(event, dist_cutoff)
+    def get_dataframe(self, event, dist_cutoff, sim_cutoff):
+        tsv = self.get_tsv_path(event, dist_cutoff, sim_cutoff)
         if not os.path.exists(tsv):
             return None
         else:
@@ -214,7 +220,7 @@ class HACFilteredSummary(object):
     def make(self, event, prefix, feature_set,
              min_cluster_size=2, sim_threshold=.2264,
              dist_cutoff=1.35):
-        tsv_path = self.get_tsv_path(event, dist_cutoff)
+        tsv_path = self.get_tsv_path(event, dist_cutoff, sim_threshold)
         lvecs = SentenceLatentVectorsResource()
         #spa = SaliencePredictionAggregator()
         hac = HACSummarizer()
@@ -271,8 +277,8 @@ class HACFilteredSummary(object):
                 updates.append({
                     'query id': event.query_id[5:],
                     'system id': 'cunlp',
-                    'run id': 'hac-d{}'.format(
-                        dist_cutoff),
+                    'run id': 'hac-dist_{}-sim_{}'.format(
+                        dist_cutoff, sim_threshold),
                     'stream id': row['stream id'], 
                     'sentence id': row['sentence id'],
                     'timestamp': timestamp,

@@ -1,6 +1,6 @@
 import os
-from ..data import get_resource_manager
-from ..pipeline.salience import SaliencePredictionAggregator
+from cuttsum.data import get_resource_manager
+from cuttsum.salience import SaliencePredictionAggregator
 import gzip
 import numpy as np
 import re

@@ -262,7 +262,8 @@ def sentencestring_worker_(job_queue, result_queue, **kwargs):
 
 class SentenceLatentVectorsResource(Resource):
     def __init__(self):
-        Resource.__init__(self)
+        #Resource.__init__(self)
+        self.deps_met_ = set()
         self.dir_ = os.path.join(
             os.getenv(u'TREC_DATA', u'.'), u'sentence-latent-vectors')
         if not os.path.exists(self.dir_):

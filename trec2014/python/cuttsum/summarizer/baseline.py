@@ -1,4 +1,4 @@
-from ..data import get_resource_manager
+from cuttsum.data import get_resource_manager
 import re
 from itertools import izip
 import scipy.cluster.hierarchy as hac
@@ -8,10 +8,10 @@ import numpy as np
 import os
 import gzip
 from datetime import datetime, timedelta
-from ..misc import ProgressBar
+from cuttsum.misc import ProgressBar
 from sklearn.metrics.pairwise import cosine_similarity
 import pandas as pd
-from ..pipeline.salience import SaliencePredictionAggregator
+from cuttsum.salience import SaliencePredictionAggregator
 
 
 class HACSummarizer(object):

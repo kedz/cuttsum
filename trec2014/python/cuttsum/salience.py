@@ -2,8 +2,8 @@ import os
 import re
 import gzip
 import pandas as pd
-from ..data import get_resource_manager, MultiProcessWorker
-from ..misc import ProgressBar
+from cuttsum.data import get_resource_manager, MultiProcessWorker
+from cuttsum.misc import ProgressBar
 import random
 import GPy
 import numpy as np
