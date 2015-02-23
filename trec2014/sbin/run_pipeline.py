@@ -214,8 +214,6 @@ def run_summarizer_jobs(feature_ablation=False, cross_fold=False, **kwargs):
         for jnum, job in enumerate(
             jobs.feature_ablation_jobs(u'feature-ablation')):
 
-            if jnum != 2: 
-                continue
             print job
             job.start(**kwargs)
 

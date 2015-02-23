@@ -66,8 +66,9 @@ class MultiProcessWorker(object):
                 progress_bar, result_handler=None, **kwargs):
         from .misc import ProgressBar
         max_jobs = len(jobs)
-        job_queue = multiprocessing.Queue()
-        result_queue = multiprocessing.Queue()
+        manager = multiprocessing.Manager()
+        job_queue = manager.Queue()
+        result_queue = manager.Queue()
 
         for job in jobs:
             job_queue.put(job)
