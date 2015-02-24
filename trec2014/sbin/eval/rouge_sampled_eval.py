@@ -301,7 +301,7 @@ def print_results(configs):
     n_jobs = len(configs)
     pb = ProgressBar(n_jobs)
     results = []
-    for result in multiprocessing.Pool(1).imap_unordered(rouge, configs):
+    for result in multiprocessing.Pool(5).imap_unordered(rouge, configs):
         pb.update()
         results.append(result)
     results.sort(key=lambda x: x[3], reverse=True)
