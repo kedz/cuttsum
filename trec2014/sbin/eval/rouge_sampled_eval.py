@@ -23,7 +23,7 @@ def random_summary(updates, max_length):
     return summary_text
 
 def make_rank_summaries(
-    rank_sal_cutoff, rank_sim_cutoff, model_summaries, max_samples=1000:
+    rank_sal_cutoff, rank_sim_cutoff, model_summaries, max_samples=1000):
     
     data_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge")
     config_path = os.path.join(
