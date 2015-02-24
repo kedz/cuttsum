@@ -11,6 +11,7 @@ import subprocess
 import re
 import multiprocessing
 
+random.seed(1986)
 
 def random_summary(updates, max_length):
     updates_cpy = list(updates)
@@ -25,7 +26,10 @@ def random_summary(updates, max_length):
 def make_rank_summaries(
     rank_sal_cutoff, rank_sim_cutoff, model_summaries, max_samples=1000):
     
-    data_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge")
+    rouge_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge")
+    data_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge", "rank")
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
     config_path = os.path.join(
         data_dir, "rank_sal_{}_sim_{}_config".format(
             rank_sal_cutoff, rank_sim_cutoff))
@@ -34,7 +38,7 @@ def make_rank_summaries(
         for event, corpus in job.eval_events():
             model_summary = model_summaries[event.fs_name()]
             model_path = os.path.join(
-                data_dir, "model_{}".format(event.fs_name()))
+                rouge_dir, "model_{}".format(event.fs_name()))
             max_len = len(model_summary)
             df = RankedSalienceFilteredSummary().get_dataframe(
                 event,  
@@ -67,7 +71,10 @@ def make_rank_summaries(
 def make_apsaltr_summaries(
     apsal_sal_cutoff, apsal_sim_cutoff, model_summaries, max_samples=1000):
     
-    data_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge")
+    rouge_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge")
+    data_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge", "apsaltr")
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
     config_path = os.path.join(
         data_dir, "apsaltr_sal_{}_sim_{}_config".format(
             apsal_sal_cutoff, apsal_sim_cutoff))
@@ -76,7 +83,7 @@ def make_apsaltr_summaries(
         for event, corpus in job.eval_events():
             model_summary = model_summaries[event.fs_name()]
             model_path = os.path.join(
-                data_dir, "model_{}".format(event.fs_name()))
+                rouge_dir, "model_{}".format(event.fs_name()))
             max_len = len(model_summary)
             df = APSalTRankSalThreshFilteredSummary().get_dataframe(
                 event, job.key, job.feature_set, 
@@ -103,7 +110,10 @@ def make_apsaltr_summaries(
 def make_apsal_summaries(apsal_sal_cutoff, apsal_sim_cutoff, 
                          model_summaries, max_samples=1000):
     
-    data_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge")
+    rouge_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge")
+    data_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge", "apsal")
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
     config_path = os.path.join(
         data_dir, "apsal_sal_{}_sim_{}_config".format(
             apsal_sal_cutoff, apsal_sim_cutoff))
@@ -112,7 +122,7 @@ def make_apsal_summaries(apsal_sal_cutoff, apsal_sim_cutoff,
         for event, corpus in job.eval_events():
             model_summary = model_summaries[event.fs_name()]
             model_path = os.path.join(
-                data_dir, "model_{}".format(event.fs_name()))
+                rouge_dir, "model_{}".format(event.fs_name()))
             max_len = len(model_summary)
             df = APSalienceFilteredSummary().get_dataframe(
                 event, job.key, job.feature_set, 
@@ -139,7 +149,10 @@ def make_apsal_summaries(apsal_sal_cutoff, apsal_sim_cutoff,
 
 def make_ap_summaries(ap_sim_cutoff, model_summaries, max_samples=1000):
     
-    data_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge")
+    rouge_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge")
+    data_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge", "ap")
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
     config_path = os.path.join(
         data_dir, "ap_sim_{}_config".format(ap_sim_cutoff))
     config_paths = []
@@ -147,7 +160,7 @@ def make_ap_summaries(ap_sim_cutoff, model_summaries, max_samples=1000):
         for event, corpus in job.eval_events():
             model_summary = model_summaries[event.fs_name()]
             model_path = os.path.join(
-                data_dir, "model_{}".format(event.fs_name()))
+                rouge_dir, "model_{}".format(event.fs_name()))
             max_len = len(model_summary)
             df = APFilteredSummary().get_dataframe(
                 event, ap_sim_cutoff)  
@@ -172,8 +185,11 @@ def make_ap_summaries(ap_sim_cutoff, model_summaries, max_samples=1000):
 
 def make_hac_summaries(hac_dist_cutoff, hac_sim_cutoff, 
                        model_summaries, max_samples=1000):
-    
-    data_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge")
+   
+    rouge_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge") 
+    data_dir = os.path.join(os.getenv("TREC_DATA", "."), "rouge", 'hac')
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
     config_path = os.path.join(
         data_dir, "hac_dist{}_sim_{}_config".format(
             hac_dist_cutoff, hac_sim_cutoff))
@@ -182,7 +198,7 @@ def make_hac_summaries(hac_dist_cutoff, hac_sim_cutoff,
         for event, corpus in job.eval_events():
             model_summary = model_summaries[event.fs_name()]
             model_path = os.path.join(
-                data_dir, "model_{}".format(event.fs_name()))
+                rouge_dir, "model_{}".format(event.fs_name()))
             max_len = len(model_summary)
             df = HACFilteredSummary().get_dataframe(
                 event, hac_dist_cutoff, hac_sim_cutoff)  
@@ -261,6 +277,7 @@ for rank_sal_cutoff in rank_sal_cutoffs:
         c = make_rank_summaries(
             rank_sal_cutoff, rank_sim_cutoff, model_summaries)
         rank_configs.append(c)
+
 
 apsaltr_configs = []
 for apsaltr_sal_cutoff in apsaltr_sal_cutoffs:

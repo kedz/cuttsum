@@ -236,7 +236,7 @@ def rouge(args):
     config_path = args
     o = subprocess.check_output(
         "cd RELEASE-1.5.5 ; " + \
-        "./ROUGE-1.5.5.pl -s -n 2 -a -f A -m -z SPL {}".format(config_path),
+        "./ROUGE-1.5.5.pl -s -n 2 -x -a -f A -m -z SPL {}".format(config_path),
         shell=True)
     recall = float(re.search('X ROUGE-2 Average_R: ([^ ]+)', o).group(1))
     prec = float(re.search('X ROUGE-2 Average_P: ([^ ]+)', o).group(1))
@@ -270,74 +270,70 @@ ap_sim_cutoffs = ap_cutoffs
 hac_dist_cutoffs, hac_sim_cutoffs = hac_cutoffs
 
 
-rank_configs = []
-for rank_sal_cutoff in rank_sal_cutoffs:
-    print rank_sal_cutoff
-    for rank_sim_cutoff in rank_sim_cutoffs:
-        print rank_sim_cutoff
-        c = make_rank_summaries(
-            rank_sal_cutoff, rank_sim_cutoff, model_summaries)
-        rank_configs.append(c)
-
-apsaltr_configs = []
-for apsaltr_sal_cutoff in apsaltr_sal_cutoffs:
-    print apsaltr_sal_cutoff
-    for apsaltr_sim_cutoff in apsaltr_sim_cutoffs:
-        print apsaltr_sim_cutoff
-        c = make_apsaltr_summaries(
-            apsaltr_sal_cutoff, apsaltr_sim_cutoff, model_summaries)
-        apsaltr_configs.append(c)
-
-apsal_configs = []
-for apsal_sal_cutoff in apsal_sal_cutoffs:
-    print apsal_sal_cutoff
-    for apsal_sim_cutoff in apsal_sim_cutoffs:
-        print apsal_sim_cutoff
-        c = make_apsal_summaries(
-            apsal_sal_cutoff, apsal_sim_cutoff, model_summaries)
-        apsal_configs.append(c)
-
-ap_configs = []
-for ap_sim_cutoff in ap_sim_cutoffs:
-    print ap_sim_cutoff
-    c = make_ap_summaries(
-        ap_sim_cutoff, model_summaries)
-    ap_configs.append(c)
-
-hac_configs = []
-for hac_dist_cutoff in hac_dist_cutoffs:
-    print hac_dist_cutoff
-    for hac_sim_cutoff in hac_sim_cutoffs:
-        print hac_sim_cutoff
-        c = make_hac_summaries(
-            hac_dist_cutoff, hac_sim_cutoff, model_summaries)
-        hac_configs.append(c)
-
 def print_results(configs):
 
     n_jobs = len(configs)
     pb = ProgressBar(n_jobs)
     results = []
-    for result in multiprocessing.Pool(20).imap_unordered(rouge, configs):
+    for result in multiprocessing.Pool(24).imap_unordered(rouge, configs):
         pb.update()
         results.append(result)
     results.sort(key=lambda x: x[3], reverse=True)
-    for i, result in enumerate(results, 1):
+    for i, result in enumerate(results[:10], 1):
         path, r, p, f1 = result
         print i, path
         print  "R: {}".format(r), "P: {}".format(p), "F1: {}".format(f1)
 
-print "BEST RANK"
-print_results(rank_configs)
-print
-print "BEST APSAL TR"
-print_results(apsaltr_configs)
-print
+
+apsal_configs = []
+for apsal_sal_cutoff in apsal_sal_cutoffs:
+    for apsal_sim_cutoff in apsal_sim_cutoffs:
+        c = make_apsal_summaries(
+            apsal_sal_cutoff, apsal_sim_cutoff, model_summaries)
+        apsal_configs.append(c)
+
 print "BEST APSAL"
 print_results(apsal_configs)
 print
+
+ap_configs = []
+for ap_sim_cutoff in ap_sim_cutoffs:
+    c = make_ap_summaries(
+        ap_sim_cutoff, model_summaries)
+    ap_configs.append(c)
 print "BEST AP"
 print_results(ap_configs)
 print
+hac_configs = []
+for hac_dist_cutoff in hac_dist_cutoffs:
+    for hac_sim_cutoff in hac_sim_cutoffs:
+        c = make_hac_summaries(
+            hac_dist_cutoff, hac_sim_cutoff, model_summaries)
+        hac_configs.append(c)
+
+
 print "BEST HAC"
 print_results(hac_configs)
+print 
+
+rank_configs = []
+for rank_sal_cutoff in rank_sal_cutoffs:
+    for rank_sim_cutoff in rank_sim_cutoffs:
+        c = make_rank_summaries(
+            rank_sal_cutoff, rank_sim_cutoff, model_summaries)
+        rank_configs.append(c)
+
+print "BEST RANK"
+print_results(rank_configs)
+print
+apsaltr_configs = []
+for apsaltr_sal_cutoff in apsaltr_sal_cutoffs:
+    for apsaltr_sim_cutoff in apsaltr_sim_cutoffs:
+        c = make_apsaltr_summaries(
+            apsaltr_sal_cutoff, apsaltr_sim_cutoff, model_summaries)
+        apsaltr_configs.append(c)
+
+print "BEST APSAL TR"
+print_results(apsaltr_configs)
+print
+
