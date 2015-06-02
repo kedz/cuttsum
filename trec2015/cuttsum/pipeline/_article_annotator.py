@@ -18,9 +18,9 @@ class ArticlesResource(MultiProcessWorker):
             os.makedirs(self.dir_)
 
 
-    def streamitem_iter(self, event, corpus):
+    def streamitem_iter(self, event, corpus, extractor):
         for hour in event.list_event_hours():
-            path = self.get_chunk_path(event, hour)
+            path = self.get_chunk_path(event, extractor, hour)
             if os.path.exists(path):
             
                 with sc.Chunk(path=path, mode="rb", 
