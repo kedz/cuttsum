@@ -1,4 +1,5 @@
 from cuttsum.resources import MultiProcessWorker
+from cuttsum.trecdata import SCChunkResource
 import signal
 import urllib3
 import os
@@ -6,6 +7,7 @@ import Queue
 import gzip
 import re
 import streamcorpus as sc
+from datetime import datetime
 
 class ArticlesResource(MultiProcessWorker):
     def __init__(self):
@@ -29,6 +31,79 @@ class ArticlesResource(MultiProcessWorker):
 
 
 
+    def get_job_units(self, event, corpus, **kwargs):
+
+        extractor = kwargs.get("extractor", "gold")
+        overwrite = kwargs.get("overwrite", False)
+        data_dir = os.path.join(self.dir_, extractor, event.fs_name())
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+        chunks_resource = SCChunkResource()
+
+        if extractor == "gold":
+
+            import cuttsum.judgements
+
+            all_matches = cuttsum.judgements.get_matches()
+            matches = all_matches[all_matches["query id"] == event.query_id]
+
+            hours = set([datetime.utcfromtimestamp(int(update_id.split("-")[0])).replace(
+                             minute=0, second=0)
+                         for update_id in matches["update id"].tolist()])
+            hours = sorted(list(hours))
+           
+            units = []
+            for h, hour in enumerate(hours):
+                output_path = self.get_chunk_path(event, extractor, hour)
+                if overwrite is True or not os.path.exists(output_path):
+                    units.append(h)
+            return units
+
+
+        else:
+            raise Exception("extractor: {} not implemented!".format(extractor))
+
+    def do_job_unit(self, event, corpus, unit, **kwargs):
+        
+        extractor = kwargs.get("extractor", "gold")
+        data_dir = os.path.join(self.dir_, extractor, event.fs_name())
+        chunks_resource = SCChunkResource()
+        
+        if extractor == "gold":
+            import cuttsum.judgements
+            all_matches = cuttsum.judgements.get_matches()
+            matches = all_matches[all_matches["query id"] == event.query_id]
+            stream_ids = set(
+                matches["update id"].apply(lambda x: "-".join(x.split("-")[:-1])).tolist())
+
+            hours = set([datetime.utcfromtimestamp(int(update_id.split("-")[0])).replace(
+                             minute=0, second=0)
+                         for update_id in matches["update id"].tolist()])
+            hours = sorted(list(hours))
+            hour = hours[unit]
+            output_path = self.get_chunk_path(event, extractor, hour)
+            gold_si = []
+            for path in chunks_resource.get_chunks_for_hour(hour, corpus):
+                with sc.Chunk(path=path, mode="rb", message=corpus.sc_msg()) as chunk:
+                    for si in chunk:
+                        if si.stream_id in stream_ids:
+                            gold_si.append(si)
+            gold_si.sort(key=lambda x: x.stream_id)
+            for si in gold_si:
+                print si.stream_id
+
+            if os.path.exists(output_path):
+                os.remove(path)            
+            with sc.Chunk(path=output_path, mode="wb", message=corpus.sc_msg()) as chunk:
+                for si in gold_si:
+                    chunk.add(si)
+
+    
+
+        else:
+            raise Exception("extractor: {} not implemented!".format(extractor))
+
+
     def check_coverage(self, event, corpus, **kwargs):
         data_dir = os.path.join(self.dir_, event.fs_name())
         hours = event.list_event_hours()
@@ -45,8 +120,8 @@ class ArticlesResource(MultiProcessWorker):
             return n_covered / float(n_hours)
 
 
-    def get_chunk_path(self, event, hour):
-        data_dir = os.path.join(self.dir_, event.fs_name())
+    def get_chunk_path(self, event, extractor, hour):
+        data_dir = os.path.join(self.dir_, extractor, event.fs_name())
         return os.path.join(data_dir, u'{}.sc.gz'.format(
             hour.strftime(u'%Y-%m-%d-%H')))
 
