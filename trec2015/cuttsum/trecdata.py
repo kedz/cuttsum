@@ -6,6 +6,7 @@ import Queue
 import gzip
 import re
 import streamcorpus as sc
+from gnupg import GPG
 
 class UrlListResource(MultiProcessWorker):
     def __init__(self):
@@ -66,6 +67,49 @@ class UrlListResource(MultiProcessWorker):
         self.do_work(urllist_worker_, jobs, n_procs, progress_bar,
                      corpus=corpus)
         return True
+
+
+
+    def get_job_units(self, event, corpus, **kwargs):
+        preroll = kwargs.get("preroll", 0)
+        overwrite = kwargs.get("overwrite", False)
+
+        data_dir = os.path.join(self.dir_, corpus.fs_name())
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+        
+        units = []
+        hours = event.list_event_hours(preroll=preroll)
+        for i, hour in enumerate(hours):
+            ulist_path = os.path.join(
+                data_dir, u'{}.txt.gz'.format(hour.strftime(u'%Y-%m-%d-%H')))
+            if overwrite is True or not os.path.exists(ulist_path):
+                units.append(i)
+        return units 
+
+    def do_job_unit(self, event, corpus, unit, **kwargs):
+        preroll = kwargs.get("preroll", 0)
+        data_dir = os.path.join(self.dir_, corpus.fs_name())
+        http = urllib3.PoolManager(timeout=15.0) #, retries=True)
+        hours = event.list_event_hours(preroll=preroll)
+        for i, hour in enumerate(hours):
+            if i != unit:
+                continue
+            ulist_path = os.path.join(
+                data_dir, u'{}.txt.gz'.format(hour.strftime(u'%Y-%m-%d-%H')))
+            hour_str = hour.strftime(u'%Y-%m-%d-%H')
+            url = u'{}{}/index.html'.format(corpus.aws_url_, hour_str)
+
+            r = http.request('GET', url)
+            with gzip.open(ulist_path, u'w') as f:
+                for link in re.findall(r'<a href="(.*?)">', r.data):
+                    if "index.html" in link:
+                        continue
+                    if "news" in link or "NEWS" in link:
+                        f.write('{}/{}\n'.format(hour_str, link))
+           
+        
+
 
 def urllist_worker_(job_queue, result_queue, **kwargs):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -143,6 +187,48 @@ class SCChunkResource(MultiProcessWorker):
  
     def dependencies(self):
         return tuple(['UrlListResource',])
+
+
+    def get_job_units(self, event, corpus, **kwargs):
+        preroll = kwargs.get("preroll", 0)
+        overwrite = kwargs.get("overwrite", False)
+
+        n_chunks = 0
+        n_covered = 0
+        units = []
+        for unit, (domain, count, path, url) in enumerate(self.get_chunk_info_paths_urls(
+                event, corpus, preroll=preroll)):
+            #if domains is None or domain in domains:
+            
+            n_chunks += 1
+            if overwrite is True or not os.path.exists(path):
+                units.append(unit)
+        return units
+
+    def do_job_unit(self, event, corpus, unit, **kwargs):
+        preroll = kwargs.get("preroll", 0)
+        
+        for i, (domain, count, path, url) in enumerate(self.get_chunk_info_paths_urls(
+                event, corpus, preroll=preroll)):
+            if i != unit:
+                continue
+            gpg = GPG()
+            http = urllib3.PoolManager(timeout=15.0, retries=3)
+            parent = os.path.dirname(path)
+            if not os.path.exists(parent):
+                try:
+                    os.makedirs(parent)
+                except OSError as e:
+                    if e.errno == errno.EEXIST and os.path.isdir(parent):
+                        pass
+
+            r = http.request('GET', url)
+            with open(path, u'wb') as f:
+                f.write(str(gpg.decrypt(r.data)))
+
+
+ 
+    #### clean out code below this point ###
 
     def check_coverage(self, event, corpus, domains=None,
         preroll=0, **kwargs):
