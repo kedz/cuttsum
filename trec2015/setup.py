@@ -99,13 +99,15 @@ install_requires = [
     "cython",
     "pandas",
     "streamcorpus",
-    "urllib3"
+    "urllib3",
+    "mpi4py",
+    "python-gnupg",
 ]
 
 
 setup(
     name = "cuttsum",
-    version = "0.1.1",
+    version = "0.2.0",
     author = "Chris Kedzie",
     author_email = "kedzie@cs.columbia.edu",
     description = ("Code repo for Columbia U. TREC Temporal Summarizer."),
