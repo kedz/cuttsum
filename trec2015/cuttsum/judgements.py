@@ -34,6 +34,12 @@ def get_2013_nuggets():
     return df
 
 
+
+def get_matches():
+    df_2013 = get_2013_matches()
+    df_2014 = get_2014_matches()
+    return pd.concat([df_2013, df_2014])
+
 def get_2013_matches():
     matches_tsv = resource_filename(
             u'cuttsum', os.path.join(u'2013-data', u'matches.tsv.gz'))
