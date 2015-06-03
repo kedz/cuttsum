@@ -81,6 +81,7 @@ def make_jobs(event_ids, resource_paths):
     for resource_path in resource_paths:
         mods = resource_path.split(".")
         class_name = mods[-1]
+        print type(class_name)
         package_path = ".".join(mods[:-1])
         mod = __import__(package_path, fromlist=[class_name])
         clazz = getattr(mod, class_name)
@@ -185,11 +186,13 @@ if __name__ == u"__main__":
                         help=u"job manager command.")
     parser.add_argument(u"--event-ids", type=int, nargs=u"+",
                         help=u"event ids to select.")
-    parser.add_argument(u"--resource-paths", type=unicode, nargs=u"+",
+    parser.add_argument(u"--resource-paths", type=str, nargs=u"+",
                         help=u"resources to add to job queue.",
                         choices=[ 
         "cuttsum.trecdata.UrlListResource", 
-        "cuttsum.trecdata.SCChunkResource"])
+        "cuttsum.trecdata.SCChunkResource",
+        "cuttsum.pipeline.ArticlesResource",
+        ])
     parser.add_argument(u"--n-procs", type=int, default=1,
                         help="number of processes to add")
 
