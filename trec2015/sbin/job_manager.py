@@ -192,6 +192,8 @@ if __name__ == u"__main__":
         "cuttsum.trecdata.UrlListResource", 
         "cuttsum.trecdata.SCChunkResource",
         "cuttsum.pipeline.ArticlesResource",
+        "cuttsum.summarizers.RetrospectiveMonotoneSubmodularOracle",
+        "cuttsum.summarizers.MonotoneSubmodularOracle",
         ])
     parser.add_argument(u"--n-procs", type=int, default=1,
                         help="number of processes to add")
@@ -205,16 +207,13 @@ if __name__ == u"__main__":
         size = comm.size
         if rank == 0:
             print "starting manager!"
-
             jobs = make_jobs(args.event_ids, args.resource_paths)
             start_manager(jobs)
         elif rank < args.n_procs:
-            #import time 
-            #time.sleep(2 * rank)
             print "starting worker"
             start_worker()
     elif args.cmd == u"add-jobs":
-        add_jobs(args.event_ids, args.resource_paths, None, **{}) #, ompi_server_file, **kwargs):
+        add_jobs(args.event_ids, args.resource_paths, None, **{})
     elif args.cmd == u"stop":
         stop_manager()
 
