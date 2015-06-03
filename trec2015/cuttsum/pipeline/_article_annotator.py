@@ -74,9 +74,11 @@ class ArticlesResource(MultiProcessWorker):
             all_matches = cuttsum.judgements.get_matches()
             matches = all_matches[all_matches["query id"] == event.query_id]
             stream_ids = set(
-                matches["update id"].apply(lambda x: "-".join(x.split("-")[:-1])).tolist())
+                matches["update id"].apply(
+                    lambda x: "-".join(x.split("-")[:-1])).tolist())
 
-            hours = set([datetime.utcfromtimestamp(int(update_id.split("-")[0])).replace(
+            hours = set([datetime.utcfromtimestamp(
+                            int(update_id.split("-")[0])).replace(
                              minute=0, second=0)
                          for update_id in matches["update id"].tolist()])
             hours = sorted(list(hours))
