@@ -4,6 +4,8 @@ from cuttsum.pipeline import ArticlesResource
 import cuttsum.judgements
 
 
+
+
 class MonotoneSubmodularOracle(MultiProcessWorker):
     def __init__(self):
         self.dir_ = os.path.join(
