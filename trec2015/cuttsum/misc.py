@@ -1,6 +1,7 @@
 import sys
 from functools import reduce
 import re
+import pandas as pd
 
 class ProgressBar:
     def __init__(self, max_jobs):
@@ -143,3 +144,16 @@ def enum(*sequential, **named):
     """
     enums = dict(zip(sequential, range(len(sequential))), **named)
     return type('Enum', (), enums)
+
+def si2df(si):
+    sents = []
+    for s, sent in enumerate(si.body.sentences["lingpipe"]):
+        sents.append({
+            "timestamp": int(si.stream_id.split("-")[0]),
+            "sent id": s,
+            "sent text": stringify_streamcorpus_sentence(sent).decode("utf-8"),
+            "doc id": si.stream_id,
+            "update id": si.stream_id + "-" + str(s),
+            })
+    return pd.DataFrame(sents)
+
