@@ -102,6 +102,7 @@ install_requires = [
     "urllib3",
     "mpi4py",
     "python-gnupg",
+    "goose-extractor",
 ]
 
 
