@@ -103,6 +103,7 @@ install_requires = [
     "mpi4py",
     "python-gnupg",
     "goose-extractor",
+    "regex",
 ]
 
 
