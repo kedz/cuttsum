@@ -2,6 +2,7 @@ import os
 from cuttsum.resources import MultiProcessWorker
 from cuttsum.pipeline import ArticlesResource
 import cuttsum.judgements
+import numpy as np
 import pandas as pd
 import sumpy
 
@@ -15,7 +16,8 @@ class RetrospectiveMonotoneSubmodularOracle(MultiProcessWorker):
         if not os.path.exists(self.dir_):
             os.makedirs(self.dir_)
 
-    def get_path_prefix(self, event, corpus, extractor, budget, soft_matching):
+    def get_path_prefix(self, event, corpus, extractor, 
+            budget, soft_matching):
         return os.path.join(self.dir_, extractor, str(budget), 
             "soft_match" if soft_matching is True else "no_soft_match", 
             corpus.fs_name(), event.fs_name()) 
@@ -25,7 +27,9 @@ class RetrospectiveMonotoneSubmodularOracle(MultiProcessWorker):
         if extractor == "gold":
             return [0]
         else:
-            raise Exception("extractor: {} not implemented!".format(extractor))
+            raise Exception(
+                "extractor: {} not implemented!".format(extractor))
+
 
     def do_job_unit(self, event, corpus, unit, **kwargs):
         if unit != 0:
@@ -34,7 +38,8 @@ class RetrospectiveMonotoneSubmodularOracle(MultiProcessWorker):
         soft_match = kwargs.get("soft_match", False)
         budget = kwargs.get("budget", 25)
         
-        output_path_prefix = self.get_path_prefix(event, corpus, extractor, budget, soft_match)
+        output_path_prefix = self.get_path_prefix(
+            event, corpus, extractor, budget, soft_match)
 
         ## Set up summarizer ###
         def f_of_A(system, A, V_min_A, e, input_df, ndarray_data):
@@ -51,20 +56,60 @@ class RetrospectiveMonotoneSubmodularOracle(MultiProcessWorker):
         matches = all_matches[all_matches["query id"] == event.query_id]
         
         from cuttsum.misc import si2df
-        
+
+        if soft_match is True:
+            from cuttsum.classifiers import NuggetClassifier
+            classify_nuggets = NuggetClassifier().get_classifier(event)
+            if event.query_id.startswith("TS13"):
+                judged = cuttsum.judgements.get_2013_updates() 
+                judged = judged[judged["query id"] == event.query_id]
+                judged_uids = set(judged["update id"].tolist())
+  
         all_df = [] 
+        
         for hour, path, si in articles.streamitem_iter(
                 event, corpus, extractor):
+
             df = si2df(si)
             df["nuggets"] = df["update id"].apply(
-                lambda x: set(matches[matches["update id"] == x]["nugget id"].tolist()))
+                lambda x: set(
+                    matches[matches["update id"] == x]["nugget id"].tolist()))
+
+            if soft_match is True:
+                I = np.where(
+                    df["update id"].apply(lambda x: x not in judged_uids))[0]
+                
+                unjudged = df[
+                    df["update id"].apply(lambda x: x not in judged_uids)]
+                unjudged_sents = unjudged["sent text"].tolist()
+                assert len(unjudged_sents) == I.shape[0]
+
+                df.loc[I, "nuggets"] = classify_nuggets(unjudged_sents)
+            
+
             df = df[df["nuggets"].apply(len) > 0]
             all_df.append(df)
-        
+
         all_df = pd.concat(all_df)
+        all_df.reset_index(inplace=True)
+
         summary =  system.summarize(all_df)
-        F_of_S = len(set(n for ns in summary._df["nuggets"].tolist() for n in ns))
-        
+        F_of_S = len(
+            set(n for ns in summary._df["nuggets"].tolist() for n in ns))
+
+        print "F(S)", F_of_S
+        print "summary nuggets" 
+        sum_nuggets = list(set(
+            n for ns in summary._df["nuggets"].tolist() for n in ns))
+        sum_nuggets.sort()
+        print sum_nuggets
+ 
+        possible_nuggets = list(set(
+            n for ns in all_df["nuggets"].tolist() for n in ns))
+        possible_nuggets.sort()
+        print possible_nuggets
+        print len(possible_nuggets) 
+
         event_nuggets = set(matches["nugget id"].tolist())
         total_nuggets = len(event_nuggets)
         timestamp = int(si.stream_id.split("-")[0])
