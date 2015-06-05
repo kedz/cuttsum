@@ -213,7 +213,7 @@ class SCChunkResource(MultiProcessWorker):
             if i != unit:
                 continue
             gpg = GPG()
-            http = urllib3.PoolManager(timeout=15.0, retries=3)
+            http = urllib3.PoolManager()
             parent = os.path.dirname(path)
             if not os.path.exists(parent):
                 try:
@@ -222,7 +222,9 @@ class SCChunkResource(MultiProcessWorker):
                     if e.errno == errno.EEXIST and os.path.isdir(parent):
                         pass
 
-            r = http.request('GET', url)
+            r = http.request('GET', url, 
+                timeout=urllib3.Timeout(connect=10.0, read=30.0),
+                retries=urllib3.Retry(total=5))
             with open(path, u'wb') as f:
                 f.write(str(gpg.decrypt(r.data)))
 
