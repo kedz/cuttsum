@@ -3,6 +3,13 @@ import multiprocessing
 
 class MultiProcessWorker(object):
 
+    def __unicode__(self):
+        return unicode(self.__class__.__name__)
+
+    def __str__(self):
+        return self.__class__.__name__
+ 
+
     def do_work(self, worker, jobs, n_procs,
                 progress_bar, result_handler=None, **kwargs):
         from .misc import ProgressBar
