@@ -1,13 +1,18 @@
 from cuttsum.resources import MultiProcessWorker
 from cuttsum.trecdata import SCChunkResource
+from cuttsum.misc import si2df
 import signal
 import urllib3
 import os
 import Queue
 import gzip
-import re
+import regex as re
 import streamcorpus as sc
 from datetime import datetime
+from sklearn.feature_extraction import DictVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+import lxml.etree
 
 class ArticlesResource(MultiProcessWorker):
     def __init__(self):
@@ -59,6 +64,14 @@ class ArticlesResource(MultiProcessWorker):
                     units.append(h)
             return units
 
+        elif extractor == "goose":
+            hours = event.list_event_hours()
+            units = []
+            for h, hour in enumerate(hours):
+                output_path = self.get_chunk_path(event, extractor, hour)
+                if overwrite is True or not os.path.exists(output_path):
+                    units.append(h)
+            return units
 
         else:
             raise Exception("extractor: {} not implemented!".format(extractor))
@@ -90,6 +103,7 @@ class ArticlesResource(MultiProcessWorker):
                     for si in chunk:
                         if si.stream_id in stream_ids:
                             gold_si.append(si)
+
             gold_si.sort(key=lambda x: x.stream_id)
             for si in gold_si:
                 print si.stream_id
@@ -100,11 +114,117 @@ class ArticlesResource(MultiProcessWorker):
                 for si in gold_si:
                     chunk.add(si)
 
-    
+        elif extractor == "goose":
+
+            import nltk
+            from nltk.tokenize import WordPunctTokenizer
+            sent_tok = nltk.data.load('tokenizers/punkt/english.pickle')
+            word_tok = WordPunctTokenizer()           
+ 
+            from goose import Goose, Configuration
+            config = Configuration()
+            config.enable_image_fetching = False
+            g = Goose(config)
+            
+            hour = event.list_event_hours()[unit]
+            output_path = self.get_chunk_path(event, extractor, hour)
+            good_si = []
+
+            for path in chunks_resource.get_chunks_for_hour(hour, corpus):
+                with sc.Chunk(path=path, mode="rb", message=corpus.sc_msg()) as chunk:
+                    for si in chunk:
+
+                        if si.body.clean_visible is None:
+                            continue
+
+                        article_text = self._get_goose_text(g, si)
+                        if article_text is None:
+                            continue
+
+                        if not self._contains_query(event, article_text):
+                            continue
+                
+                        art_pretty = sent_tok.tokenize(article_text)
+                        art_sents = [word_tok.tokenize(sent) for sent in art_pretty]
+
+                        df = si2df(si)
+                        I = self._map_goose2streamitem(art_sents, df["words"].tolist())
+                            
+                        if "serif" in si.body.sentences:
+                            si_sentences = si.body.sentences["serif"]
+                        elif "lingpipe" in si.body.sentences:
+                            si_sentences = si.body.sentences["lingpipe"]
+                        else:
+                            raise Exception("Bad sentence annotator.")
+                                        
+                        for i_goose, i_si in enumerate(I):
+                            print art_pretty[i_goose]
+                            print df.loc[i_si, "sent text"]
+                            print
+                            if "goose" not in si_sentences[i_si].labels:
+                                si_sentences[i_si].labels["goose"] = art_pretty[i_goose]
+                            else:
+                                si_sentences[i_si].labels["goose"] += " " + art_pretty[i_goose]
+
+                        good_si.append(si)
+
+            good_si.sort(key=lambda x: x.stream_id)
+            for si in good_si:
+                print si.stream_id
+
+            if os.path.exists(output_path):
+                os.remove(path)            
+            with sc.Chunk(path=output_path, mode="wb", message=corpus.sc_msg()) as chunk:
+                for si in good_si:
+                    chunk.add(si)
 
         else:
             raise Exception("extractor: {} not implemented!".format(extractor))
 
+
+    def _get_goose_text(self, g, si):
+        try:
+            article = g.extract(raw_html=si.body.clean_html)
+            return article.cleaned_text
+        except IndexError:
+            return None
+        except lxml.etree.ParserError:
+            return None
+
+    def _contains_query(self, event, article_text):
+        for query in event.query: 
+            if not re.search(query, article_text, re.I):
+                return False
+        return True
+
+    def _map_goose2streamitem(self, goose_sents, si_sents):
+
+        goose_wc = []
+        for sent in goose_sents:
+            c = {}
+            for token in sent:
+                token = token.lower()
+                if isinstance(token, unicode):
+                    token = token.encode("utf-8") 
+                c[token] = c.get(token, 0) + 1
+            goose_wc.append(c)
+        si_wc = []
+        for sent in si_sents:
+            c = {}
+            for token in sent:
+                token = token.lower()
+                if isinstance(token, unicode):
+                    token = token.encode("utf-8") 
+                c[token] = c.get(token, 0) + 1
+            si_wc.append(c)
+
+        vec = DictVectorizer()
+        vec.fit(goose_wc + si_wc)
+        X_goose = vec.transform(goose_wc)
+        X_si = vec.transform(si_wc)
+        K = cosine_similarity(X_goose, X_si)
+        I = np.argmax(K, axis=1)
+        return I                                    
 
     def check_coverage(self, event, corpus, **kwargs):
         data_dir = os.path.join(self.dir_, event.fs_name())
