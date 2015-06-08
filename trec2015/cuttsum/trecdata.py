@@ -1,6 +1,7 @@
 from cuttsum.resources import MultiProcessWorker
 import signal
-import urllib3
+import requests
+import urllib3.exceptions
 import os
 import Queue
 import gzip
@@ -213,7 +214,8 @@ class SCChunkResource(MultiProcessWorker):
             if i != unit:
                 continue
             gpg = GPG()
-            http = urllib3.PoolManager()
+            
+            #http = urllib3.PoolManager()
             parent = os.path.dirname(path)
             if not os.path.exists(parent):
                 try:
@@ -222,11 +224,25 @@ class SCChunkResource(MultiProcessWorker):
                     if e.errno == errno.EEXIST and os.path.isdir(parent):
                         pass
 
-            r = http.request('GET', url, 
-                timeout=urllib3.Timeout(connect=10.0, read=30.0),
-                retries=urllib3.Retry(total=5))
-            with open(path, u'wb') as f:
-                f.write(str(gpg.decrypt(r.data)))
+#r = requests.get('https://api.github.com/events')
+            retries = 3
+            while 1:
+                try:
+                    r = requests.get(url, timeout=30)
+                    with open(path, u'wb') as f:
+                        f.write(str(gpg.decrypt(r.content)))
+                    break
+                except requests.exceptions.ConnectionError:
+                    retries -= 1
+                    if retries == 0:
+                        break
+
+                except urllib3.exceptions.ReadTimeoutError:
+                    retries -= 1
+                    if retries == 0:
+                        break
+                #timeout=urllib3.Timeout(connect=10.0, read=30.0),
+                #retries=urllib3.Retry(total=5))
 
 
  
