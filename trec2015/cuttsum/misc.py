@@ -145,16 +145,34 @@ def enum(*sequential, **named):
     enums = dict(zip(sequential, range(len(sequential))), **named)
     return type('Enum', (), enums)
 
-def si2df(si):
+def si2df(si, extractor=None):
+
     sents = []
-    for s, sent in enumerate(si.body.sentences["lingpipe"]):
-        sents.append({
-            "timestamp": int(si.stream_id.split("-")[0]),
-            "sent id": s,
-            "sent text": stringify_streamcorpus_sentence(sent).decode("utf-8"),
-            "doc id": si.stream_id,
-            "words": [token.token for token in sent.tokens],
-            "update id": si.stream_id + "-" + str(s),
-            })
+    if extractor is None or extractor == "gold":
+    
+        for s, sent in enumerate(si.body.sentences["lingpipe"]):
+            sents.append({
+                "timestamp": int(si.stream_id.split("-")[0]),
+                "sent id": s,
+                "sent text": stringify_streamcorpus_sentence(
+                    sent).decode("utf-8"),
+                "doc id": si.stream_id,
+                "words": [token.token for token in sent.tokens],
+                "update id": si.stream_id + "-" + str(s),
+                })
+    elif extractor == "goose":
+        
+        for s, sent in enumerate(si.body.sentences["goose"]):
+            if len(sent.tokens) == 0:
+                continue
+            sents.append({
+                "timestamp": int(si.stream_id.split("-")[0]),
+                "sent id": s,
+                "sent text": stringify_streamcorpus_sentence(
+                    sent).decode("utf-8"),
+                "doc id": si.stream_id,
+                "words": [token.token for token in sent.tokens],
+                "update id": si.stream_id + "-" + str(s),
+                })
     return pd.DataFrame(sents)
 

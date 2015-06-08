@@ -25,7 +25,7 @@ class RetrospectiveMonotoneSubmodularOracle(MultiProcessWorker):
 
     def get_job_units(self, event, corpus, **kwargs):
         extractor = kwargs.get("extractor", "gold")
-        if extractor == "gold":
+        if extractor == "gold" or extractor == "goose":
             return [0]
         else:
             raise Exception(
@@ -71,13 +71,12 @@ class RetrospectiveMonotoneSubmodularOracle(MultiProcessWorker):
   
         # All sentences containing nuggets will go in all_df.
         all_df = [] 
-        
         # Pull out articles with nuggets.
         for hour, path, si in articles.streamitem_iter(
                 event, corpus, extractor):
 
             # Convert stream item to dataframe and add gold label nuggets.
-            df = si2df(si)
+            df = si2df(si, extractor=extractor)
             df["nuggets"] = df["update id"].apply(
                 lambda x: set(
                     matches[matches["update id"] == x]["nugget id"].tolist()))
@@ -171,7 +170,7 @@ class MonotoneSubmodularOracle(MultiProcessWorker):
 
     def get_job_units(self, event, corpus, **kwargs):
         extractor = kwargs.get("extractor", "gold")
-        if extractor == "gold":
+        if extractor == "gold" or extractor == "goose":
             return [0]
         else:
             raise Exception("extractor: {} not implemented!".format(extractor))
@@ -231,9 +230,9 @@ class MonotoneSubmodularOracle(MultiProcessWorker):
         # Pull out articles with nuggets.
         for hour, path, si in articles.streamitem_iter(
                 event, corpus, extractor):
-
+            print hour, si.stream_id
             # Convert stream item to dataframe and add gold label nuggets.
-            df = si2df(si)
+            df = si2df(si, extractor=extractor)
             df["nuggets"] = df["update id"].apply(
                 lambda x: set(
                     matches[matches["update id"] == x]["nugget id"].tolist()))
