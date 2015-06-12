@@ -231,6 +231,7 @@ if __name__ == u"__main__":
         "cuttsum.trecdata.UrlListResource", 
         "cuttsum.trecdata.SCChunkResource",
         "cuttsum.pipeline.ArticlesResource",
+        "cuttsum.pipeline.DedupedArticlesResource",
         "cuttsum.classifiers.NuggetClassifier",
         "cuttsum.summarizers.RetrospectiveMonotoneSubmodularOracle",
         "cuttsum.summarizers.MonotoneSubmodularOracle",
