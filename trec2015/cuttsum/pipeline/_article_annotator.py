@@ -1,6 +1,7 @@
 from cuttsum.resources import MultiProcessWorker
 from cuttsum.trecdata import SCChunkResource
 from cuttsum.misc import si2df
+import cuttsum.judgements
 import signal
 import urllib3
 import os
@@ -13,6 +14,7 @@ from sklearn.feature_extraction import DictVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import lxml.etree
+import pandas as pd
 
 class ArticlesResource(MultiProcessWorker):
     def __init__(self):
@@ -22,6 +24,23 @@ class ArticlesResource(MultiProcessWorker):
         if not os.path.exists(self.dir_):
             os.makedirs(self.dir_)
 
+    def get_stats_df(self, event, extractor):
+        path = self.get_stats_path(event, extractor)
+        if not os.path.exists(path): return None
+        with open(path, "r") as f:
+            return pd.read_csv(f, sep="\t")
+
+
+    def get_stats_path(self, event, extractor):
+        return os.path.join(
+            self.dir_, extractor, event.fs_name(), 
+            "{}.stats.tsv".format(event.fs_name()))
+
+    def get_si(self, event, corpus, extractor, hour):
+        path = self.get_chunk_path(event, extractor, hour)
+        if not os.path.exists(path): return []
+        with sc.Chunk(path=path, mode="rb", message=corpus.sc_msg()) as chunk:
+            return [si for si in chunk]
 
     def streamitem_iter(self, event, corpus, extractor):
         for hour in event.list_event_hours():
@@ -33,8 +52,48 @@ class ArticlesResource(MultiProcessWorker):
                     for si in chunk:
                         yield hour, path, si   
 
+    def dataframe_iter(self, event, corpus, extractor, include_matches=None):
+
+        if include_matches is not None:
+
+            all_matches = cuttsum.judgements.get_merged_dataframe()
+            matches = all_matches[all_matches["query id"] == event.query_id]
+        
+        if include_matches == "soft":
+            from cuttsum.classifiers import NuggetClassifier
+            classify_nuggets = NuggetClassifier().get_classifier(event)
+            if event.query_id.startswith("TS13"):
+                judged = cuttsum.judgements.get_2013_updates() 
+                judged = judged[judged["query id"] == event.query_id]
+                judged_uids = set(judged["update id"].tolist())
+            else:
+                raise Exception("Bad corpus!")
+
+        for hour, path, si in self.streamitem_iter(event, corpus, extractor):
+            df = si2df(si, extractor=extractor)
+                
+            if include_matches is not None:
+                df["nuggets"] = df["update id"].apply(
+                    lambda x: set(
+                        matches[
+                            matches["update id"] == x]["nugget id"].tolist()))
+
+            if include_matches == "soft":
+                ### NOTE BENE: geting an array of indices to index unjudged
+                # sentences so I can force pandas to return a view and not a
+                # copy.
+                I = np.where(
+                    df["update id"].apply(lambda x: x not in judged_uids))[0]
+                
+                unjudged = df[
+                    df["update id"].apply(lambda x: x not in judged_uids)]
+                unjudged_sents = unjudged["sent text"].tolist()
+                assert len(unjudged_sents) == I.shape[0]
+
+                df.loc[I, "nuggets"] = classify_nuggets(unjudged_sents)
 
 
+            yield df
 
     def get_job_units(self, event, corpus, **kwargs):
 
