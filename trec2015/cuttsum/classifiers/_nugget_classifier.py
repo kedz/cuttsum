@@ -42,7 +42,7 @@ class NuggetClassifier(MultiProcessWorker):
                 X = vec.transform(sents) 
                 P = clf.predict_proba(X)
                 y = np.zeros(X.shape[0], dtype="int32")
-                y[P[:,1] > .7] = 1
+                y[P[:,1] > .95] = 1
                 for i in np.where(y == 1)[0]:
                     #if X[i].sum() < 3:
                     #if len(sents[i].split(" ")) < 6:
