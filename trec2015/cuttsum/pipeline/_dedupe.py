@@ -10,6 +10,8 @@ import re
 from scipy.sparse import vstack
 from sklearn.metrics.pairwise import cosine_similarity
 import streamcorpus as sc
+import numpy as np
+import cuttsum.judgements
 
 
 class DedupedArticlesResource(MultiProcessWorker):
@@ -24,8 +26,24 @@ class DedupedArticlesResource(MultiProcessWorker):
         path = self.get_stats_path(
             event, corpus, extractor, threshold=threshold)
         if not os.path.exists(path): return None
+        def _conv(x):
+            if x == "":
+                return float("nan")
+            return float(x)
         with open(path, "r") as f:
-            df = pd.read_csv(f, sep="\t", engine="python")
+            df = pd.read_csv(f, sep="\t",
+                converters={
+                    "earliest": _conv, 
+                    "latest": _conv, 
+                    "second": _conv, 
+                    "third": _conv,
+                },
+                dtype={
+                    "earliest": np.float64, 
+                    "latest": np.float64, 
+                    "second": np.float64, 
+                    "third": np.float64,
+            })
         return df
 
     def get_stats_path(self, event, corpus, extractor, threshold=.8):
@@ -33,13 +51,91 @@ class DedupedArticlesResource(MultiProcessWorker):
             self.dir_, extractor, corpus.fs_name(), str(threshold), 
             "{}.stats.tsv".format(event.fs_name())) 
 
-    def get_deduped_path(self, event, corpus, extractor, threshold=.8):
+    def get_deduped_path_fmt(self, event, corpus, extractor, threshold=.8):
         return os.path.join(
             self.dir_, extractor, corpus.fs_name(), str(threshold), 
-            "{}.sc.gz".format(event.fs_name())) 
+            event.fs_name() + ".{}.sc.gz") 
+
+
+    def streamitem_iter(self, event, corpus, extractor, threshold=.8):
+        df = self.get_stats_df(
+            event, corpus, extractor, threshold)
+        if df is None: return
+
+        import math
+        num_chunks = int(math.ceil(len(df) / 1000.))
+        tmp = self.get_deduped_path_fmt(
+            event, corpus, extractor, threshold)
+        for i in xrange(1, num_chunks + 1):
+            path = tmp.format(i)
+            if os.path.exists(path): 
+                with sc.Chunk(path=path, mode="rb", 
+                        message=corpus.sc_msg()) as chunk:
+                    for si in chunk:
+                        yield si
+
+    def dataframe_iter(self, event, corpus, extractor, include_matches=None, threshold=.8):
+
+        if include_matches is not None:
+
+            all_matches = cuttsum.judgements.get_merged_dataframe()
+            matches = all_matches[all_matches["query id"] == event.query_id]
+        
+        if include_matches == "soft":
+            from cuttsum.classifiers import NuggetClassifier
+            classify_nuggets = NuggetClassifier().get_classifier(event)
+            if event.query_id.startswith("TS13"):
+                judged = cuttsum.judgements.get_2013_updates() 
+                judged = judged[judged["query id"] == event.query_id]
+                judged_uids = set(judged["update id"].tolist())
+            else:
+                raise Exception("Bad corpus!")
+
+        for si in self.streamitem_iter(event, corpus, extractor, threshold):
+            
+            df = si2df(si, extractor=extractor)
+                
+            if include_matches is not None:
+                df["nuggets"] = df["update id"].apply(
+                    lambda x: set(
+                        matches[
+                            matches["update id"] == x]["nugget id"].tolist()))
+
+            if include_matches == "soft":
+                ### NOTE BENE: geting an array of indices to index unjudged
+                # sentences so I can force pandas to return a view and not a
+                # copy.
+                I = np.where(
+                    df["update id"].apply(lambda x: x not in judged_uids))[0]
+                
+                unjudged = df[
+                    df["update id"].apply(lambda x: x not in judged_uids)]
+                unjudged_sents = unjudged["sent text"].tolist()
+                assert len(unjudged_sents) == I.shape[0]
+
+                df.loc[I, "nuggets"] = classify_nuggets(unjudged_sents)
+
+
+            yield df
+
+
 
     def get_job_units(self, event, corpus, **kwargs):
-        return [0]
+        overwrite = kwargs.get("overwrite", False)
+        if overwrite is True: return [0]
+
+        import math
+        thresh = kwargs.get("dedupe-sim-threshold", .8)
+        extractor = kwargs.get("extractor", "goose")
+        df = self.get_stats_df(event, corpus, extractor, thresh)
+        if df is None: return [0]
+
+        num_chunks = int(math.ceil(len(df) / 1000.))
+        tmp = self.get_deduped_path_fmt(event, corpus, extractor, thresh)
+        for i in xrange(1, num_chunks + 1):
+            if not os.path.exists(tmp.format(i)): return [0]
+                    
+        return []
 
     def do_job_unit(self, event, corpus, unit, **kwargs):
         if unit != 0:
@@ -84,49 +180,66 @@ class DedupedArticlesResource(MultiProcessWorker):
                     counts[word.lower()] += 1   
             return counts
 
+        def next_chunk_file(chunk_file_num):
+            deduped_path_fmt = self.get_deduped_path_fmt(
+                event, corpus, extractor, threshold=thresh)
+            deduped_path = deduped_path_fmt.format(
+                chunk_file_num)
+            deduped_dir = os.path.dirname(deduped_path)
+            if not os.path.exists(deduped_dir):
+                os.makedirs(deduped_dir)
+            
+            if os.path.exists(deduped_path):
+                os.remove(deduped_path)
+
+            return sc.Chunk(path=deduped_path, mode="wb", 
+                message=corpus.sc_msg())
+
+
+
         X = None
 
-        deduped_path = self.get_deduped_path(
-            event, corpus, extractor, threshold=thresh)
-        deduped_dir = os.path.dirname(deduped_path)
-        if not os.path.exists(deduped_dir):
-            os.makedirs(deduped_dir)
-        if os.path.exists(deduped_path):
-            os.remove(deduped_path)
+        chunk_file_num = 1
+        chunk = next_chunk_file(chunk_file_num)
 
-        with sc.Chunk(path=deduped_path, mode="wb", 
-                message=corpus.sc_msg()) as chunk:
+        for hour, path, si in si_iter:
+            df = si2df(si, extractor=extractor)
 
-            for hour, path, si in si_iter:
-                df = si2df(si, extractor=extractor)
+            counts = make_counts(df)
+            x = hasher.transform([counts.items()])
+            x.shape = (1, hasher.n_features)
+            
+            if X is None:
+                X = x
+                times = [[make_time(df)]]
+                ids = [[si.stream_id]]
+                matches = [query_in_top20(event, df)]
 
-                counts = make_counts(df)
-                x = hasher.transform([counts.items()])
-                x.shape = (1, hasher.n_features)
-                
-                if X is None:
-                    X = x
-                    times = [[make_time(df)]]
-                    ids = [[si.stream_id]]
-                    #sis = [si]
-                    matches = [query_in_top20(event, df)]
-                    chunk.add(si)
-                            
-                else:
-                    K = cosine_similarity(X, x)
-                    k_argmax = K.argmax()
-                    
-                    if K[k_argmax] < thresh:
+                chunk.add(si)
                         
-                        X = vstack([X, x])
-                        times.append([make_time(df)])
-                        ids.append([si.stream_id])
-                        #sis.append(si)
-                        matches.append(query_in_top20(event, df))
-                        chunk.add(si)
-                    else:
-                        times[k_argmax].append(make_time(df))
-                        ids[k_argmax].append(si.stream_id)
+            else:
+                K = cosine_similarity(X, x)
+                k_argmax = K.argmax()
+                
+                if K[k_argmax] < thresh:
+                    
+                    X = vstack([X, x])
+                    times.append([make_time(df)])
+                    ids.append([si.stream_id])
+                    matches.append(query_in_top20(event, df))
+
+                    if X.shape[0] % 1000 == 0:
+                        chunk.close()
+                        chunk_file_num += 1
+                        chunk = next_chunk_file(chunk_file_num)
+
+                    chunk.add(si)
+                    
+                else:
+                    times[k_argmax].append(make_time(df))
+                    ids[k_argmax].append(si.stream_id)
+               
+        chunk.close() 
      
         df = to_df(ids, times, matches)            
         print df
