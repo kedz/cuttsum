@@ -1,5 +1,6 @@
 from mpi4py import MPI
 from cuttsum.misc import enum
+from datetime import datetime
 
 tags = enum("READY", "DONE", "STOP", "ADD_JOB", "WORKER_START", "WORKER_STOP")
 
@@ -102,12 +103,12 @@ def make_jobs(event_ids, resource_paths, config_path):
     import cuttsum.corpora
     events = [event for event in cuttsum.events.get_events()
               if event.query_num in set(event_ids)]
+
     jobs = [] 
     resources = []    
     for resource_path in resource_paths:
         mods = resource_path.split(".")
         class_name = mods[-1]
-        print type(class_name)
         package_path = ".".join(mods[:-1])
         mod = __import__(package_path, fromlist=[class_name])
         clazz = getattr(mod, class_name)
@@ -117,12 +118,7 @@ def make_jobs(event_ids, resource_paths, config_path):
         resources.append((resource, res_configs))
     
         for event in events:
-            if event.query_id.startswith("TS13"):        
-                corpus = cuttsum.corpora.EnglishAndUnknown2013()
-            elif event.query_id.startswith("TS14"):
-                corpus = cuttsum.corpora.SerifOnly2014()
-            else:
-                raise Exception("Bad query id: {}".format(event.query_id)) 
+            corpus = cuttsum.corpora.get_raw_corpus(event)
             for resource, jobs_settings in resources:
                 if len(jobs_settings) == 0:                
                     for unit in resource.get_job_units(event, corpus):
@@ -136,7 +132,6 @@ def make_jobs(event_ids, resource_paths, config_path):
                                 (event, corpus, resource, unit, 
                                  job_name, job_settings))
                            
- 
     return jobs
 
 
@@ -217,7 +212,8 @@ def start_worker():
     print "worker-{} shutting down!".format(rank)
 
 if __name__ == u"__main__":
-      
+    
+    import sys  
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument(u"--cmd", type=unicode, choices=[
@@ -232,6 +228,7 @@ if __name__ == u"__main__":
         "cuttsum.trecdata.SCChunkResource",
         "cuttsum.pipeline.ArticlesResource",
         "cuttsum.pipeline.DedupedArticlesResource",
+        "cuttsum.pipeline.InputStreamResource",
         "cuttsum.classifiers.NuggetClassifier",
         "cuttsum.summarizers.RetrospectiveMonotoneSubmodularOracle",
         "cuttsum.summarizers.MonotoneSubmodularOracle",
@@ -243,19 +240,33 @@ if __name__ == u"__main__":
 
     args = parser.parse_args()
 
-
-
     if args.cmd == "start":
 
         comm = MPI.COMM_WORLD
         rank = comm.rank
         size = comm.size
+
         if rank == 0:
-            print "starting manager!"
+
+            print "Starting CUTTSUM job manager."
             jobs = make_jobs(args.event_ids, args.resource_paths, args.config)
-            start_manager(jobs)
+            msg = "{}: Running ``job_manager.py" + " ".join(sys.argv) + "''"
+            start = datetime.now()
+            with open("jm.log", "a") as log:
+                log.write(msg.format(start) + "\n")
+                log.flush()
+                try:
+                    start_manager(jobs)
+                finally:
+                    stop = datetime.now()
+                    duration = stop - start
+                    msg = "{}: Finished ``job_manager.py" \
+                        + " ".join(sys.argv) + "''" \
+                        + " Elapsed time: {}"
+                    log.write(msg.format(stop, duration) + "\n")
+                    log.flush()
+            
         elif rank < args.n_procs:
-            print "starting worker"
             start_worker()
     elif args.cmd == u"add-jobs":
         add_jobs(args.event_ids, args.resource_paths, None, **{})
