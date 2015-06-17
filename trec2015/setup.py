@@ -126,5 +126,5 @@ setup(
     ],
     include_package_data=True,
     package_data=setup_package_data(),
-    #ext_modules=build_srilm_extension(),
+    ext_modules=build_srilm_extension(),
 )
