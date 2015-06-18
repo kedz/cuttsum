@@ -11,8 +11,9 @@ def read(fname):
 
 def setup_package_data():
     """
-Set up package data -- these are mostly resources generated from TS track
-organizers."""
+    Set up package data -- these are mostly resources generated from TS track
+    organizers.
+    """
 
             
     data = [
@@ -52,7 +53,10 @@ organizers."""
     return {'cuttsum': data}
     
 def build_srilm_extension():
-
+    """
+    Compile the SRILM wrapper using cython if present
+    otherwise backoff to the generated cpp file.
+    """
     try:
         from Cython.Build import cythonize
         use_cython = True
@@ -91,21 +95,16 @@ def build_srilm_extension():
     else:
         return extension
 
-
-
-#extension = Extension(
-
 install_requires = [
     "cython",
     "pandas",
     "streamcorpus",
-    "urllib3",
+    "requests",
     "mpi4py",
     "python-gnupg",
     "goose-extractor",
     "regex",
 ]
-
 
 setup(
     name = "cuttsum",
@@ -119,10 +118,9 @@ setup(
     packages=['cuttsum'],
     long_description=read('README'),
     install_requires=install_requires,
-    classifiers=[
-#        "Development Status :: 3 - Alpha",
-#        "Topic :: Utilities",
-#        "License :: OSI Approved :: BSD License",
+    classifiers=[ 
+        "multidocument summarization",
+        "natural language processing"
     ],
     include_package_data=True,
     package_data=setup_package_data(),
