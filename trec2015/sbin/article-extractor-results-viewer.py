@@ -10,8 +10,6 @@ def main():
 
     for ext in ["gold", "goose"]:
         for event in cuttsum.events.get_2013_events():
-            if event.query_id != "TS13.3":
-                continue
             if event.query_id.startswith("TS13"):
                 corpus = cuttsum.corpora.EnglishAndUnknown2013()
             else:
@@ -26,6 +24,8 @@ def main():
                 if hour > max_hour:
                     max_hour = hour
                 total += 1
+            if total == 0:
+                continue
             results.append({"event": event.fs_name(),
                             "event start": event.list_event_hours()[0],
                             "event stop": event.list_event_hours()[-1],
