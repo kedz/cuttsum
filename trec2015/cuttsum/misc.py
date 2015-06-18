@@ -170,7 +170,7 @@ def si2df(si, extractor=None):
                 "sent id": s,
                 "sent text": stringify_streamcorpus_sentence(
                     sent).decode("utf-8"),
-                "doc id": si.stream_id,
+                "stream id": si.stream_id,
                 "words": [token.token for token in sent.tokens],
                 "update id": si.stream_id + "-" + str(s),
                 })
