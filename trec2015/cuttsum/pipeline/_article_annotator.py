@@ -18,7 +18,6 @@ import pandas as pd
 
 class ArticlesResource(MultiProcessWorker):
     def __init__(self):
-        #Resource.__init__(self)
         self.dir_ = os.path.join(
             os.getenv(u'TREC_DATA', u'.'), u'articles')
         if not os.path.exists(self.dir_):
@@ -188,7 +187,7 @@ class ArticlesResource(MultiProcessWorker):
             g = Goose(config)
             
             hour = event.list_event_hours()[unit]
-            output_path = self.get_chunk_path(event, extractor, hour)
+            output_path_tmp = self.get_chunk_template(event, extractor, hour)
             good_si = []
 
             for path in chunks_resource.get_chunks_for_hour(hour, corpus):
@@ -235,16 +234,20 @@ class ArticlesResource(MultiProcessWorker):
                             si.body.sentences["goose"][i_si].tokens.extend(
                                 tokens)
                         good_si.append(si)
-            if len(good_si) == 0:
-                print "Nothing in hour:", hour
-                return 
+            #if len(good_si) == 0:
+            #    print "Nothing in hour:", hour
+            #    return 
+            output_path = output_path_tmp.format(len(good_si))
+            odir = os.path.dirname(output_path)
+            if not os.path.exists(odir):
+                os.makedirs(odir)
+            if os.path.exists(output_path):
+                os.remove(path)            
 
             good_si.sort(key=lambda x: x.stream_id)
             for si in good_si:
                 print si.stream_id
 
-            if os.path.exists(output_path):
-                os.remove(path)            
             print "Writing to", output_path
             with sc.Chunk(path=output_path, mode="wb", 
                     message=corpus.sc_msg()) as chunk:
@@ -314,10 +317,21 @@ class ArticlesResource(MultiProcessWorker):
             return n_covered / float(n_hours)
 
 
+    def get_chunk_template(self, event, extractor, hour):
+        data_dir = os.path.join(self.dir_, extractor, event.fs_name())
+        fname = u'{}-' + u'{}.sc.gz'.format(hour.strftime(u'%Y-%m-%d-%H'))
+        return os.path.join(data_dir, fname)
+
+
     def get_chunk_path(self, event, extractor, hour):
         data_dir = os.path.join(self.dir_, extractor, event.fs_name())
-        return os.path.join(data_dir, u'{}.sc.gz'.format(
-            hour.strftime(u'%Y-%m-%d-%H')))
+        hour_str = "{}.sc.gz".format(hour.strftime(u'%Y-%m-%d-%H'))
+        files = [fname for fname in os.listdir(data_dir) 
+                 if fname.endswith(hour_str)]
+        if len(files) == 0:
+            return os.path.join(data_dir, hour_str)
+        else:
+            return os.path.join(data_dir, files[0])
 
 #    def get(self, event, corpus, **kwargs):
 #        data_dir = os.path.join(self.dir_, event.fs_name())
