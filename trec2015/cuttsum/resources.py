@@ -4,10 +4,13 @@ import multiprocessing
 class MultiProcessWorker(object):
 
     def __unicode__(self):
-        return unicode(self.__class__.__name__)
+        return self.__class__.__name__.decode("utf-8")
 
     def __str__(self):
         return self.__class__.__name__
+
+    def requires_services(self, event, corpus, **kwargs):
+        return []
  
 
     def do_work(self, worker, jobs, n_procs,
