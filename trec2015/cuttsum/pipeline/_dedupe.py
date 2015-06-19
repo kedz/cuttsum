@@ -112,8 +112,8 @@ class DedupedArticlesResource(MultiProcessWorker):
                     df["update id"].apply(lambda x: x not in judged_uids)]
                 unjudged_sents = unjudged["sent text"].tolist()
                 assert len(unjudged_sents) == I.shape[0]
-
-                df.loc[I, "nuggets"] = classify_nuggets(unjudged_sents)
+                if I.shape[0] > 0:
+                    df.loc[I, "nuggets"] = classify_nuggets(unjudged_sents)
 
 
             yield df
