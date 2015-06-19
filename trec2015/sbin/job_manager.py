@@ -2,7 +2,24 @@ from mpi4py import MPI
 from cuttsum.misc import enum
 from datetime import datetime
 
+
 tags = enum("READY", "DONE", "STOP", "ADD_JOB", "WORKER_START", "WORKER_STOP")
+
+def start_service(service):
+    if service == "corenlp":
+        import corenlp as cnlp
+        cnlp.server.start(
+            mem="10G", threads=4, max_message_len=524288,
+            annotators=["tokenize", "ssplit", "pos", "lemma", "ner"],
+            corenlp_props={
+                "pos.maxlen": "150",
+                "ssplit.eolonly": "true"})
+
+def stop_service(service):
+    if service == "corenlp":
+        print "KILLING CORENLP"
+        import corenlp as cnlp
+        cnlp.server.stop()
 
 def start_manager(jobs):
 
@@ -12,6 +29,9 @@ def start_manager(jobs):
     #port = MPI.Open_port(info)
     #service = "job manager"
     #MPI.Publish_name(service, info, port)
+
+    services = {}
+
     idle_workers = []
     n_workers = comm.size - 1
     while n_workers > 0:
@@ -44,16 +64,38 @@ def start_manager(jobs):
         if tag == tags.READY:
             if len(jobs) > 0:
                 #print "sending job", jobs[0], "to worker-{}".format(source)
-                comm.send(jobs.pop(0), dest=source, tag=tags.WORKER_START)
+                for req in data:
+                    services[req] -= 1
+ 
+                job = jobs.pop(0)
+                event, corpus, resource, unit, job_name, kwargs = job
+                requires = resource.requires_services(
+                    event, corpus, **kwargs)
+                for req in requires:
+                    num_running = services.get(req, 0)
+                    if num_running == 0:
+                        start_service(req)
+                    services[req] = num_running + 1
+
+                comm.send(job, dest=source, tag=tags.WORKER_START)
+                
+                for req, num_users in services.items():
+                    if num_users == 0:
+                        stop_service(req)
             else:
+
+                for req, num_users in services.items():
+                    print req, num_users
+                    if num_users == 0:
+                        stop_service(req)
                 #print "Adding idle worker-{}".format(source)
                 #idle_workers.append(source)
-                
                 comm.send(None, dest=source, tag=tags.WORKER_STOP)
                 n_workers -= 1
                 if n_workers == 0:
                     break
-
+    for service in services.keys():
+        stop_service(service)
     #MPI.Unpublish_name(service, info, port)
     #print('closing port...')
     #MPI.Close_port(port)
@@ -75,9 +117,29 @@ def stop_manager():
 def make_job_configurations(config_path):
 
     from collections import defaultdict
-    type_conv = defaultdict(lambda: lambda x: x) 
-    type_conv["soft_match"] = lambda x: x == "True" or x == "true"
-    type_conv["preroll"] = int
+    type_conv = defaultdict(lambda: lambda val, opt, sec, path: val) 
+    def bool_checker(val, opt, section, path):
+        if val in ["True", "true"]:
+            return True
+        elif val in ["False", "false"]:
+            return False
+        else:
+            raise Exception(
+                ("In section {} bad config option {} with value {} " + \
+                 "in config file {}").format(section, opt, val, path))
+
+    def int_checker(val, opt, section, path):
+        try:
+            return int(val)
+        except ValueError:
+            raise Exception(
+                ("In section {} bad config option {} with value {} " + \
+                 "in config file {}").format(section, opt, val, path))
+
+
+    type_conv["soft_match"] = bool_checker
+    type_conv["overwrite"] = bool_checker
+    type_conv["preroll"] = int_checker
 
     job_configurations = defaultdict(list)
     if config_path is not None:
@@ -92,7 +154,8 @@ def make_job_configurations(config_path):
                     if key == "class":
                         clazz = val
                     else:  
-                        params[key] = type_conv[key](val)                  
+                        params[key] = type_conv[key](
+                            val, key, section, config_path)                  
                 job_configurations[clazz].append((section, params))
     return job_configurations  
 
@@ -191,11 +254,12 @@ def start_worker():
     #port = MPI.Lookup_name(service, info)
     import time
 
+    done_with_services = []
     while True:
         #info = MPI.INFO_NULL
         #service = "job manager"
         #comm = MPI.COMM_WORLD.Connect(port, info, 0)
-        comm.send(None, dest=0, tag=tags.READY)
+        comm.send(done_with_services, dest=0, tag=tags.READY)
         data = comm.recv(
             source=0, tag=MPI.ANY_TAG, status=status)
         source = status.Get_source()
@@ -206,6 +270,8 @@ def start_worker():
             print "worker-{} {} {} {} {} {}".format(
                 rank, job_name, event.fs_name(), corpus.fs_name(), resource, unit) 
             resource.do_job_unit(event, corpus, unit, **kwargs)
+            done_with_services = resource.requires_services(
+                event, corpus, **kwargs)
         if tag == tags.WORKER_STOP:
             break
 
@@ -258,6 +324,7 @@ if __name__ == u"__main__":
                 log.flush()
                 try:
                     start_manager(jobs)
+                    print "I am done"
                 finally:
                     stop = datetime.now()
                     duration = stop - start
@@ -266,7 +333,7 @@ if __name__ == u"__main__":
                         + " Elapsed time: {}"
                     log.write(msg.format(stop, duration) + "\n")
                     log.flush()
-            
+                exit()         
         elif rank < args.n_procs:
             start_worker()
     elif args.cmd == u"add-jobs":
