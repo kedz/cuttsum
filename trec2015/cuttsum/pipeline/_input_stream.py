@@ -1,6 +1,6 @@
 import os
 from cuttsum.resources import MultiProcessWorker
-from cuttsum.pipeline import DedupedArticlesResource
+from cuttsum.pipeline import DedupedArticlesResource, SentenceFeaturesResource
 import gzip
 import pandas as pd
 
@@ -48,7 +48,9 @@ class InputStreamResource(MultiProcessWorker):
         
         if delay is not None:
             raise Exception("Delay must be None")
-        
+
+        feats_df = SentenceFeaturesResource().get_dataframe(
+            event, corpus, extractor, thresh)        
         ded_articles_res = DedupedArticlesResource()
         dfiter = ded_articles_res.dataframe_iter(
             event, corpus, extractor, "soft", thresh)
@@ -59,10 +61,18 @@ class InputStreamResource(MultiProcessWorker):
 
         cols = ["update id", "stream id", "sent id", "timestamp", 
                 "sent text", "nuggets"]
+        output_cols = cols + [
+            "pretty text", "tokens", "lemmas", "pos", "ne", "tokens stopped",
+            "lemmas stopped"]
+
         with gzip.open(path, "w") as f:
-            f.write("\t".join(cols) + "\n")
+            f.write("\t".join(output_cols) + "\n")
             for df in dfiter:
                 df = df.head(topk)
                 df["sent text"] = df["sent text"].apply(lambda x: x.encode("utf-8"))
-                df[cols].to_csv(f, index=False, header=False, sep="\t")
+                merged = pd.merge(df[cols], feats_df, on=["update id", "stream id", "sent id", "timestamp"])
+                if len(merged) == 0:
+                    print "Warning empty merge"
+
+                merged[output_cols].to_csv(f, index=False, header=False, sep="\t")
         
