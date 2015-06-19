@@ -176,3 +176,9 @@ def si2df(si, extractor=None):
                 })
     return pd.DataFrame(sents)
 
+def english_stopwords():
+    from pkg_resources import resource_stream
+    import os
+    stopwords_stream = resource_stream(
+        u'cuttsum', os.path.join(u"misc-data", u"stopwords.en.txt"))
+    return set(map(lambda x: x.strip(), stopwords_stream.readlines()))
