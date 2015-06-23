@@ -1,10 +1,12 @@
 import cuttsum.events
 import cuttsum.corpora
+from cuttsum.l2s import SelectLexNextOracle, SelectLexNextLex
 from cuttsum.pipeline import InputStreamResource
 import pyvw
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import random
 import matplotlib.pylab as plt
 plt.style.use('ggplot')
 
@@ -233,192 +235,18 @@ class LessPerfectOracle(pyvw.SearchTask):
    
         return output
 
-
-class LexicalFeaturesNextOracle(pyvw.SearchTask):
-    def __init__(self, vw, sch, num_actions):
-        pyvw.SearchTask.__init__(self, vw, sch, num_actions)
-        sch.set_options( sch.AUTO_HAMMING_LOSS | sch.IS_LDF ) # | sch.AUTO_CONDITION_FEATURES )
-
-    def make_example(self, sent, df, ncache):
-        tokens = df.iloc[sent]["lemmas stopped"]
-        ex = self.example(lambda:
-            {"a": [tok for tok in tokens] if len(tokens) > 0 else ["none"],
-             "b": [tok for tok in tokens if tok in ncache],
-            },
-            labelType=self.vw.lCostSensitive)
-        return ex
-
-    def _run(self, (event, docs)):
-
-        ncache = set()
-        output = []
-        n = 0
-
-        for doc in docs:
-
-            sents = range(len(doc))
-
-            while 1:
-
-                n += 1
-                # Create some examples, one for each sentence.
-                examples = [self.make_example(sent, doc, ncache) for sent in sents]
-                
-
-                # Create a final example for the option "next document".
-                # This example has the feature "all_clear" if the max gain
-                # of adding any current sentence to the summary is 0.
-                # Otherwise the feature "stay" is active.
-                gain = doc.iloc[sents]["nuggets"].apply(
-                    lambda x: len(x.difference(ncache))).values
-
-                examples.append(
-                    self.example(lambda:
-                        {"c": ["all_clear" if np.sum(gain) == 0 else "stay"],},
-                        labelType=self.vw.lCostSensitive))
-               
-                # Compute oracle. If max gain > 0, oracle always picks the 
-                # sentence with the max gain. Else, oracle picks the last 
-                # example which is the "next document" option.
-                if len(sents) > 0:
-                    oracle = np.argmax(gain) 
-                    oracle_gain = gain[oracle] 
-                    if oracle_gain == 0:
-                        oracle = len(sents)
-                else:
-                    oracle = 0
-                    oracle_gain = 0
-
-                # Make prediction.
-                pred = self.sch.predict(
-                    examples=examples,
-                    my_tag=n,
-                    oracle=oracle,
-                    condition=[], # (n-1, "p"), ])
-                )
-                output.append(pred)
-                
-                if pred < len(sents):
-                    ncache.update(doc.iloc[pred]["lemmas stopped"])
-                    del sents[pred]
-                                        
-                elif pred == len(sents):
-                    break
-   
-        return output
-
-
-
-
-
-class UpdateSummarizer(pyvw.SearchTask):
-    def __init__(self, vw, sch, num_actions):
-        pyvw.SearchTask.__init__(self, vw, sch, num_actions)
-        sch.set_options( sch.AUTO_HAMMING_LOSS | sch.IS_LDF ) # | sch.AUTO_CONDITION_FEATURES )
-
-    def make_example(self, sent, df, ncache):
-        nuggets = [nid for nid in df.iloc[sent]["nuggets"] if nid not in ncache]
-        ex = self.example(lambda:
-            {"a": [nid for nid in nuggets] if len(nuggets) > 0 else ["none"],
-             "b": [nid + "_in_cache" for nid in ncache]},
-            labelType=self.vw.lCostSensitive)
-        return ex
-
-    def get_score(self, ex, nss=None):
-        score = 0
-        if nss is None: nss = ["a", "b", "c", "p"]
-        for ns in nss:
-            for i in xrange(ex.num_features_in(ns)):
-                score += self.vw.get_weight(ex.feature(ns, i))
-        return score
-
-
-    def _run(self, docs):
-
-        ncache = set()
-        output = []
-        n = 0
-
-        for doc in docs:
-
-            sents = range(len(doc))
-
-            while 1:
-
-                n += 1
-                # Create some examples, one for each sentence.
-                examples = [self.make_example(sent, doc, ncache) for sent in sents]
-                
-
-                # Create a final example for the option "next document".
-                # This example has the feature "all_clear" if the max gain
-                # of adding any current sentence to the summary is 0.
-                # Otherwise the feature "stay" is active.
-                gain = doc.iloc[sents]["nuggets"].apply(
-                    lambda x: len(x.difference(ncache))).values
-
-                examples.append(
-                    self.example(lambda:
-                        {"c": ["all_clear" if np.sum(gain) == 0 else "stay"],},
-                        labelType=self.vw.lCostSensitive))
-               
-                # Compute oracle. If max gain > 0, oracle always picks the 
-                # sentence with the max gain. Else, oracle picks the last 
-                # example which is the "next document" option.
-                if len(sents) > 0:
-                    oracle = np.argmax(gain) 
-                    oracle_gain = gain[oracle] 
-                    if oracle_gain == 0:
-                        oracle = len(sents)
-                else:
-                    oracle = 0
-                    oracle_gain = 0
-
-                # Make prediction.
-                pred = self.sch.predict(
-                    examples=examples,
-                    my_tag=n,
-                    oracle=oracle,
-                    condition=[], # (n-1, "p"), ])
-                )
-                output.append(pred)
-                
-                # print some debug things here. Namely, the number of nuggets 
-                # each sentence contains, the scores for each features 
-                # namespace, the total model secore for each sentence/next 
-                # doc option, and the gain for each sentence.
-                num_nuggets = doc.iloc[sents]["nuggets"].apply(len).tolist()
-                a_scores = [self.get_score(ex, "a") for ex in examples]
-                b_scores = [self.get_score(ex, "b") for ex in examples]
-                c_scores = [self.get_score(ex, "c") for ex in examples]
-
-                scores_df = pd.DataFrame(
-                    [{"a": a, "b": b, "c": c, "gain": g, "nuggets": n} 
-                     for a, b, c, g, n in zip(
-                        a_scores, b_scores, c_scores, list(gain) + [0], num_nuggets + [0])])
-                scores_df["scores"] = scores_df["a"] + scores_df["b"] + scores_df["c"]
-                print scores_df
-
-                if pred > len(examples):
-                    print "PREDICT WEIRDNESS, predicted", pred, "but only", len(examples), "examples"
-                else:
-                    print "NEXT DOC CODE=", len(sents)
-                    print "PREDICTING", pred, self.get_score(examples[pred])
-                    print "ORACLE", oracle, self.get_score(examples[oracle])
-
-
-                    if pred < len(sents):
-                        ncache.update(doc.iloc[pred]["nuggets"])
-                        print "Adding sent", doc.iloc[pred]["sent text"]
-                        del sents[pred]
-                                            
-                    elif pred == len(sents):
-                        break
-                        #sents = []
-                    #if oracle == len(sents):
-                    #    sents = []
-   
-        return output
+def downsample(training_instances, size=90):
+    ds_insts = []
+    for event, dataframes in training_instances:
+        arange = [x for x in xrange(len(dataframes))]
+        random.shuffle(arange)
+        arange = arange[:size]
+        arange.sort()
+        print "downsampling", event.fs_name()
+        print arange
+        ds_df = [dataframes[i] for i in arange]
+        ds_insts.append((event, ds_df))
+    return ds_insts
 
 
 def main(learner, training_ids, test_ids, n_iters, report_dir_base):
@@ -443,16 +271,8 @@ def main(learner, training_ids, test_ids, n_iters, report_dir_base):
                 delay, topk)
 
         if event.query_num in training_ids:
-            import random
-            arange = [x for x in xrange(len(dataframes))]
-            random.shuffle(arange)
-            arange = arange[:75]
-            arange.sort()
-            print arange
-            dataframes = [dataframes[i] for i in arange]
-            #dataframes = dataframes[:10]
-            training_insts.append((event, dataframes))
-            
+            training_insts.append((event, dataframes))    
+           
         if event.query_num in test_ids:
             test_insts.append((event, dataframes))    
 
@@ -464,13 +284,19 @@ def main(learner, training_ids, test_ids, n_iters, report_dir_base):
         task = vw.init_search_task(PerfectOracle)
     elif learner == "LessPerfectOracle":
         task = vw.init_search_task(LessPerfectOracle)
-    elif learner == "LexicalFeaturesNextOracle":
-        task = vw.init_search_task(LessPerfectOracle)
+    elif learner == "SelectLexNextOracle":
+        task = vw.init_search_task(SelectLexNextOracle)
+    elif learner == "SelectLexNextLex":
+        task = vw.init_search_task(SelectLexNextLex)
     
-
     for n_iter in range(n_iters):
         print "iter", n_iter + 1
-        task.learn(training_insts)
+        ds = downsample(training_insts)
+        task.learn(ds)
+        all_train_df = [df for inst in training_insts for df in inst[1]]
+        feature_weights = task.get_feature_weights(all_train_df)
+
+        write_model(feature_weights, report_dir_base, n_iter)
 
         for event, dataframes in training_insts:
             # Predict a sequence for this training examples and see if it is sensible.
@@ -485,6 +311,17 @@ def main(learner, training_ids, test_ids, n_iters, report_dir_base):
             sequence = task.predict((event, dataframes))
             print sequence
             make_report(event, dataframes, sequence, "test", n_iter, report_dir_base)
+
+def write_model(feature_weights, report_dir_base, n_iter):
+    dirname = os.path.join(report_dir_base, "iter-{}".format(n_iter + 1))
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
+    path = os.path.join(dirname, "model.tsv")
+    with open(path, "w") as f:
+        f.write("ns\tfeat\tweight\n")
+        for fw in feature_weights:
+            f.write("{}\t{}\t{}\n".format(fw[0][:1], fw[0][2:], fw[1]))
+    
 
 def make_report(event, dataframes, sequence, part, n_iter, report_dir_base):
 
@@ -510,7 +347,7 @@ if __name__ == "__main__":
     import os
     parser = argparse.ArgumentParser()
     parser.add_argument(u"--learner", type=unicode, choices=[
-        u"PerfectOracle", u"LessPerfectOracle", u"LexicalFeaturesNextOracle"],
+        u"SelectLexNextOracle", u"SelectLexNextLex"],
         help=u"Learner to run.")
 
     parser.add_argument(u"--training-event-ids", type=int, nargs=u"+",
