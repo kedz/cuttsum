@@ -57,16 +57,6 @@ class SelectLexNextOracle(_SearchBase):
 
 class SelectLexNextLex(SelectLexNextOracle):
 
-    def make_select_example(self, sent, sents, df, cache):
-        tokens = df.iloc[sent]["lemmas stopped"]
-        cache_feats = [tok for tok in tokens if tok in cache]
-        ex = self.example(lambda:
-            {"a": tokens if len(tokens) > 0 else ["__none__"],
-             "b": cache_feats if len(cache_feats) > 0 else ["__none__"],
-            },
-            labelType=self.vw.lCostSensitive)
-        return ex
-
     def make_next_example(self, sents, df, cache, is_oracle): 
         if len(sents) > 0:
             tokens = set([w for words in df.iloc[sents]["lemmas stopped"].tolist()
@@ -103,6 +93,56 @@ class SelectLexNextLex(SelectLexNextOracle):
         for i, feat in enumerate(lexical_feats):
             w = self.vw.get_weight(ex.feature("c", i))
             fw.append(("c:" + feat, w))
+
+        fw.sort(key=lambda x: x[1])
+        return fw             
+
+class SelectLexNextLexCache(SelectLexNextOracle):
+
+    def make_next_example(self, sents, df, cache, is_oracle): 
+        if len(sents) > 0:
+            tokens = set([w for words in df.iloc[sents]["lemmas stopped"].tolist()
+                          for w in words])
+
+            tokens = list(tokens) 
+            cache_feats = [tok for tok in tokens if tok in cache]
+            return self.example(lambda: {
+                "c": tokens if len(tokens) > 0 else "__none__", 
+                "d": cache_feats if len(cache_feats) > 0 else "__none__"},
+                labelType=self.vw.lCostSensitive)
+        else:
+            return self.example(lambda: {"c": ["__none__"], "d": ["__none__"]},
+                labelType=self.vw.lCostSensitive)
+
+    def get_feature_weights(self, dataframes):
+        vocab = set([w for df in dataframes
+                     for words in df["lemmas stopped"].tolist()
+                     for w in words])
+        vocab = list(vocab)
+        lexical_feats = vocab + ["__none__"]
+        lexical_cache_feats = vocab
+        for w in vocab:
+            assert not isinstance(w, unicode)
+        ex = self.vw.example(
+            {"a": lexical_feats,
+             "b": lexical_cache_feats,
+             "c": lexical_feats,
+             "d": lexical_feats,
+            },
+            labelType=self.vw.lCostSensitive)
+        fw = []
+        for i, feat in enumerate(lexical_feats):
+            w = self.vw.get_weight(ex.feature("a", i))
+            fw.append(("a:" + feat, w))
+        for i, feat in enumerate(lexical_cache_feats):
+            w = self.vw.get_weight(ex.feature("b", i))
+            fw.append(("b:" + feat, w))
+        for i, feat in enumerate(lexical_feats):
+            w = self.vw.get_weight(ex.feature("c", i))
+            fw.append(("c:" + feat, w))
+        for i, feat in enumerate(lexical_feats):
+            w = self.vw.get_weight(ex.feature("d", i))
+            fw.append(("d:" + feat, w))
 
         fw.sort(key=lambda x: x[1])
         return fw             
