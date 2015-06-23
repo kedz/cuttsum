@@ -182,3 +182,7 @@ def english_stopwords():
     stopwords_stream = resource_stream(
         u'cuttsum', os.path.join(u"misc-data", u"stopwords.en.txt"))
     return set(map(lambda x: x.strip(), stopwords_stream.readlines()))
+
+def event2lm_name(event):
+    if event.type == "accident":
+        return "accidents-lm"
