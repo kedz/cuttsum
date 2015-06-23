@@ -1,6 +1,7 @@
 import cuttsum.events
 import cuttsum.corpora
-from cuttsum.l2s import SelectLexNextOracle, SelectLexNextLex
+from cuttsum.l2s import (SelectLexNextOracle, SelectLexNextLex,
+    SelectLexNextLexCache)
 from cuttsum.pipeline import InputStreamResource
 import pyvw
 import pandas as pd
@@ -88,7 +89,6 @@ def score_sequence(actions, dataframes):
         columns=["update id", "timestamp", "acc", "rec", "avg. gain", "sent text", "action", "gain", 
                  "max gain", "num nuggets", "max nuggets", "nuggets"])
     return results_df
-
 
 
 class PerfectOracle(pyvw.SearchTask):
@@ -288,6 +288,8 @@ def main(learner, training_ids, test_ids, n_iters, report_dir_base):
         task = vw.init_search_task(SelectLexNextOracle)
     elif learner == "SelectLexNextLex":
         task = vw.init_search_task(SelectLexNextLex)
+    elif learner == "SelectLexNextLexCache":
+        task = vw.init_search_task(SelectLexNextLexCache)
     
     for n_iter in range(n_iters):
         print "iter", n_iter + 1
@@ -347,7 +349,7 @@ if __name__ == "__main__":
     import os
     parser = argparse.ArgumentParser()
     parser.add_argument(u"--learner", type=unicode, choices=[
-        u"SelectLexNextOracle", u"SelectLexNextLex"],
+        u"SelectLexNextOracle", u"SelectLexNextLex", "SelectLexNextLexCache"],
         help=u"Learner to run.")
 
     parser.add_argument(u"--training-event-ids", type=int, nargs=u"+",
@@ -370,5 +372,3 @@ if __name__ == "__main__":
     learner = args.learner
 
     main(learner, training_ids, test_ids, n_iters, report_dir)
-
-
