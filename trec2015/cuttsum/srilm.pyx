@@ -34,11 +34,14 @@ def check_status(port):
     return result == 0
 
 def start_lm(arpa_path, order, port, timeout=9999):
-    cmd = u'nohup ngram -lm {} -tolower -order {} -server-port {}'.format(
-        arpa_path, order, port)
-    cmd += u' >lm@port{}.log 2>&1 &'.format(port)
-    print cmd
-    subprocess.Popen(cmd, shell=True)
+
+
+    cmd = [u'nohup', 'ngram', '-lm', arpa_path, '-tolower', '-order', str(order), '-server-port', 
+           str(port)]
+        #arpa_path, order, port)] # + u' >lm@port{}.log 2>&1 &'.format(port)]
+    log = "lm@port{}".format(port)
+    f = open(log, "w")
+    proc = subprocess.Popen(cmd, shell=False, stdout=f, stderr=f)
 
     server_on = False
     start = time.time()
@@ -52,7 +55,7 @@ def start_lm(arpa_path, order, port, timeout=9999):
 
         time.sleep(1)
         duration = time.time() - start
-
+    return proc.pid
 
 cdef class Client:
     cdef LMClient *lmclient
