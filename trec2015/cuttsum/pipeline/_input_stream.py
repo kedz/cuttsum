@@ -26,7 +26,7 @@ class InputStreamResource(MultiProcessWorker):
         if not os.path.exists(path): return []
         
         with gzip.open(path, "r") as f:
-            df = pd.read_csv(f, converters={"nuggets": eval}, sep="\t")
+            df = pd.read_csv(f, converters={"nuggets": eval, "lemmas stopped": eval}, sep="\t")
             stream = [(sid, group) 
                       for sid, group in df.groupby("stream id")]
             stream.sort(key=lambda x: x[0])
