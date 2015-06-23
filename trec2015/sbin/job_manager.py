@@ -5,23 +5,47 @@ from datetime import datetime
 
 tags = enum("READY", "DONE", "STOP", "ADD_JOB", "WORKER_START", "WORKER_STOP")
 
-def start_service(service):
+def start_service(service, service_configs):
     if service == "corenlp":
+        cnlp_config = service_configs.get("corenlp", {})
+        mem = cnlp_config.get("mem", "8G")
+        threads = int(cnlp_config.get("threads", 4))
+        max_message_len = int(cnlp_config.get("max_message_len", 524288))
+        port = int(cnlp_config.get("port", 9999))
         import corenlp as cnlp
         cnlp.server.start(
-            mem="10G", threads=4, max_message_len=524288,
+            port=port,
+            mem=mem, threads=threads, max_message_len=max_message_len,
             annotators=["tokenize", "ssplit", "pos", "lemma", "ner"],
             corenlp_props={
                 "pos.maxlen": "150",
                 "ssplit.eolonly": "true"})
+    elif service.endswith("-lm"):
+        lm_config = service_configs[service]
+        path = lm_config["path"]    
+        port = int(lm_config["port"])
+        print "starting", service, " on port", port
+        import cuttsum.srilm as srilm
+        pid = srilm.start_lm(path, 3, port)
+        lm_config["pid"] = pid
+        print "lm is started with pid", pid
 
-def stop_service(service):
+def stop_service(service, service_configs):
     if service == "corenlp":
+        cnlp_config = service_configs.get("corenlp", {})
+        port = int(cnlp_config.get("port", 9999))
         print "KILLING CORENLP"
         import corenlp as cnlp
-        cnlp.server.stop()
+        cnlp.server.stop(port=port)
+    if service.endswith("-lm"):
+        lm_config = service_configs[service]
+        pid = lm_config["pid"]
+        import signal
+        import os
+        print "killing", service, "with pid", pid
+        os.kill(pid, signal.SIGKILL)
 
-def start_manager(jobs):
+def start_manager(jobs, service_configs):
 
     comm = MPI.COMM_WORLD #.Accept(port, info, 0)
     status = MPI.Status() # get MPI status object
@@ -74,20 +98,20 @@ def start_manager(jobs):
                 for req in requires:
                     num_running = services.get(req, 0)
                     if num_running == 0:
-                        start_service(req)
+                        start_service(req, service_configs)
                     services[req] = num_running + 1
 
                 comm.send(job, dest=source, tag=tags.WORKER_START)
                 
                 for req, num_users in services.items():
                     if num_users == 0:
-                        stop_service(req)
+                        stop_service(req, service_configs)
             else:
 
                 for req, num_users in services.items():
                     print req, num_users
                     if num_users == 0:
-                        stop_service(req)
+                        stop_service(req, service_configs)
                 #print "Adding idle worker-{}".format(source)
                 #idle_workers.append(source)
                 comm.send(None, dest=source, tag=tags.WORKER_STOP)
@@ -95,7 +119,7 @@ def start_manager(jobs):
                 if n_workers == 0:
                     break
     for service in services.keys():
-        stop_service(service)
+        stop_service(service, service_configs)
     #MPI.Unpublish_name(service, info, port)
     #print('closing port...')
     #MPI.Close_port(port)
@@ -159,7 +183,7 @@ def make_job_configurations(config_path):
                 job_configurations[clazz].append((section, params))
     return job_configurations  
 
-def make_jobs(event_ids, resource_paths, config_path):
+def make_jobs(event_ids, resource_paths, config_path, service_configs):
 
     configs = make_job_configurations(config_path)
     import cuttsum.events
@@ -186,9 +210,11 @@ def make_jobs(event_ids, resource_paths, config_path):
                 if len(jobs_settings) == 0:                
                     for unit in resource.get_job_units(event, corpus):
                         jobs.append(
-                            (event, corpus, resource, unit, "default", {}))
+                            (event, corpus, resource, unit, "default", 
+                             {"service-configs": service_configs}))
                 else:
                     for job_name, job_settings in jobs_settings:
+                        job_settings["service-configs"] = service_configs
                         for unit in resource.get_job_units(
                                 event, corpus, **job_settings):
                             jobs.append(
@@ -277,6 +303,17 @@ def start_worker():
 
     print "worker-{} shutting down!".format(rank)
 
+def parse_service_config(config_path):
+    from ConfigParser import ConfigParser
+    parser = ConfigParser()
+    parser.read(config_path)
+    params = {}
+    for section in parser.sections():
+        params[section] = {}
+        for key, val in parser.items(section):
+            params[section][key] = val
+    return params
+
 if __name__ == u"__main__":
     
     import sys  
@@ -305,7 +342,11 @@ if __name__ == u"__main__":
     parser.add_argument(u"--config", type=str, default=None,
                         help=u"path to config file.")
 
+    parser.add_argument(u"--service-config", type=str, default=None,
+                        help=u"path to service config file.")
+
     args = parser.parse_args()
+    service_configs = parse_service_config(args.service_config)
 
     if args.cmd == "start":
 
@@ -316,15 +357,16 @@ if __name__ == u"__main__":
         if rank == 0:
 
             print "Starting CUTTSUM job manager."
-            jobs = make_jobs(args.event_ids, args.resource_paths, args.config)
+            jobs = make_jobs(
+                args.event_ids, args.resource_paths, args.config,
+                service_configs)
             msg = "{}: Running ``job_manager.py" + " ".join(sys.argv) + "''"
             start = datetime.now()
             with open("jm.log", "a") as log:
                 log.write(msg.format(start) + "\n")
                 log.flush()
                 try:
-                    start_manager(jobs)
-                    print "I am done"
+                    start_manager(jobs, service_configs)
                 finally:
                     stop = datetime.now()
                     duration = stop - start
