@@ -186,3 +186,11 @@ def english_stopwords():
 def event2lm_name(event):
     if event.type == "accident":
         return "accidents-lm"
+    elif event.type == "shooting":
+        return "terrorism-lm"
+    elif event.type == "storm":
+        return "natural_disaster-lm"
+    elif event.type == "earthquake":
+        return "natural_disaster-lm"
+    elif event.type == "bombing":
+        return "terrorism-lm"
