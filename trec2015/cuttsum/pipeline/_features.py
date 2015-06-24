@@ -21,7 +21,7 @@ class SentenceFeaturesResource(MultiProcessWorker):
             os.makedirs(self.dir_)
 
     def requires_services(self, event, corpus, **kwargs):
-        return ["corenlp", event2lm_name(event)]    
+        return ["corenlp", "gigaword-lm", event2lm_name(event)]    
 
     def get_path(self, event, corpus, extractor, threshold):
         return os.path.join(self.dir_,
@@ -58,7 +58,12 @@ class SentenceFeaturesResource(MultiProcessWorker):
         cnlp_port = int(cnlp_configs.get("port", 9999))
 
         domain_lm_config = service_configs[event2lm_name(event)]
-        domain_lm_port = int(domain_lm_config["port"])        
+        domain_lm_port = int(domain_lm_config["port"])      
+	domain_lm_order = int(domain_lm_config.get("order", 3))	
+	gw_lm_config = service_configs["gigaword-lm"]  
+        gw_lm_port = int(gw_lm_config["port"])        
+	gw_lm_order = int(gw_lm_config.get("order", 3))	
+
 
         thresh = kwargs.get("dedupe-sim-threshold", .8)
         extractor = kwargs.get("extractor", "goose")
@@ -67,7 +72,9 @@ class SentenceFeaturesResource(MultiProcessWorker):
         dfiter = res.dataframe_iter(
             event, corpus, extractor, include_matches=None, 
             threshold=thresh)
-        domain_lm = cuttsum.srilm.Client(domain_lm_port, 3, True)
+
+        domain_lm = cuttsum.srilm.Client(domain_lm_port, domain_lm_order, True)
+        gw_lm = cuttsum.srilm.Client(gw_lm_port, gw_lm_order, True)
         cnlp_client = cnlp.client.CoreNLPClient(port=cnlp_port)
 
         def heal_text(sent_text):
@@ -173,7 +180,8 @@ class SentenceFeaturesResource(MultiProcessWorker):
             "BASIC set ratio", "BASIC misc ratio"]
        
 
-        lm_cols = ["LM domain lp", "LM domain avg lp"]
+        lm_cols = ["LM domain lp", "LM domain avg lp",
+                   "LM gw lp", "LM gw avg lp"]
  
         all_cols = meta_cols + basic_cols + lm_cols
 
@@ -310,7 +318,13 @@ class SentenceFeaturesResource(MultiProcessWorker):
                 dm_avg_log_probs = [avg_lp for lp, avg_lp in dm_probs.tolist()]
                 df["LM domain lp"] = dm_log_probs
                 df["LM domain avg lp"] = dm_avg_log_probs
-
+                gw_probs = df["lemmas"].apply(
+                    lambda x: gw_lm.sentence_log_prob(
+                        " ".join([xi.lower() for xi in x])))
+                gw_log_probs = [lp for lp, avg_lp in gw_probs.tolist()]
+                gw_avg_log_probs = [avg_lp for lp, avg_lp in gw_probs.tolist()]
+                df["LM gw lp"] = gw_log_probs
+                df["LM gw avg lp"] = gw_avg_log_probs
 
                 ### Write dataframe to file ###
                 df[all_cols].to_csv(f, index=False, header=False, sep="\t")
