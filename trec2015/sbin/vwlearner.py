@@ -1,7 +1,7 @@
 import cuttsum.events
 import cuttsum.corpora
 from cuttsum.l2s import (SelectLexNextOracle, SelectLexNextLex,
-    SelectLexNextLexCache)
+    SelectLexNextLexCache, SelectLexGenericNextOracle)
 from cuttsum.pipeline import InputStreamResource
 import pyvw
 import pandas as pd
@@ -290,6 +290,8 @@ def main(learner, training_ids, test_ids, n_iters, report_dir_base):
         task = vw.init_search_task(SelectLexNextLex)
     elif learner == "SelectLexNextLexCache":
         task = vw.init_search_task(SelectLexNextLexCache)
+    elif learner == "SelectLexGenericNextOracle":
+        task = vw.init_search_task(SelectLexGenericNextOracle)
     
     for n_iter in range(n_iters):
         print "iter", n_iter + 1
@@ -349,7 +351,8 @@ if __name__ == "__main__":
     import os
     parser = argparse.ArgumentParser()
     parser.add_argument(u"--learner", type=unicode, choices=[
-        u"SelectLexNextOracle", u"SelectLexNextLex", "SelectLexNextLexCache"],
+        u"SelectLexNextOracle", u"SelectLexNextLex", "SelectLexNextLexCache",
+        u"SelectLexGenericNextOracle"],
         help=u"Learner to run.")
 
     parser.add_argument(u"--training-event-ids", type=int, nargs=u"+",
