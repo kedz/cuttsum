@@ -24,9 +24,10 @@ def start_service(service, service_configs):
         lm_config = service_configs[service]
         path = lm_config["path"]    
         port = int(lm_config["port"])
+	order = int(lm_config.get("order", 3))
         print "starting", service, " on port", port
         import cuttsum.srilm as srilm
-        pid = srilm.start_lm(path, 3, port)
+        pid = srilm.start_lm(path, order, port)
         lm_config["pid"] = pid
         print "lm is started with pid", pid
 
