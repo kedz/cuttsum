@@ -61,16 +61,35 @@ class InputStreamResource(MultiProcessWorker):
 
         cols = ["update id", "stream id", "sent id", "timestamp", 
                 "sent text", "nuggets"]
-        output_cols = cols + [
+
+        ling_cols = [
             "pretty text", "tokens", "lemmas", "pos", "ne", "tokens stopped",
             "lemmas stopped"]
+
+        basic_cols = ["BASIC length", "BASIC char length",
+            "BASIC doc position", "BASIC all caps ratio",
+            "BASIC upper ratio", "BASIC lower ratio",
+            "BASIC punc ratio", "BASIC person ratio",
+            "BASIC organization ratio", "BASIC date ratio",
+            "BASIC time ratio", "BASIC duration ratio",
+            "BASIC number ratio", "BASIC ordinal ratio",
+            "BASIC percent ratio", "BASIC money ratio",
+            "BASIC set ratio", "BASIC misc ratio"]
+
+        lm_cols = ["LM domain lp", "LM domain avg lp",
+                   "LM gw lp", "LM gw avg lp"]
+
+        output_cols = cols + ling_cols + basic_cols + lm_cols
 
         with gzip.open(path, "w") as f:
             f.write("\t".join(output_cols) + "\n")
             for df in dfiter:
                 df = df.head(topk)
                 df["sent text"] = df["sent text"].apply(lambda x: x.encode("utf-8"))
-                merged = pd.merge(df[cols], feats_df, on=["update id", "stream id", "sent id", "timestamp"])
+                merged = pd.merge(
+                    df[cols], 
+                    feats_df, 
+                    on=["update id", "stream id", "sent id", "timestamp"])
                 if len(merged) == 0:
                     print "Warning empty merge"
 
