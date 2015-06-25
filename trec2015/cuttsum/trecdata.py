@@ -7,6 +7,7 @@ import Queue
 import gzip
 import re
 import streamcorpus as sc
+import errno
 from gnupg import GPG
 
 class UrlListResource(MultiProcessWorker):
@@ -91,6 +92,13 @@ class UrlListResource(MultiProcessWorker):
     def do_job_unit(self, event, corpus, unit, **kwargs):
         preroll = kwargs.get("preroll", 0)
         data_dir = os.path.join(self.dir_, corpus.fs_name())
+        if not os.path.exists(data_dir):	
+            try:
+                os.makedirs(data_dir)
+            except OSError as exc:
+                if exc.errno == errno.EEXIST and os.path.isdir(data_dir):
+                    pass
+
         http = urllib3.PoolManager(timeout=15.0) #, retries=True)
         hours = event.list_event_hours(preroll=preroll)
         for i, hour in enumerate(hours):
@@ -224,7 +232,6 @@ class SCChunkResource(MultiProcessWorker):
                     if e.errno == errno.EEXIST and os.path.isdir(parent):
                         pass
 
-#r = requests.get('https://api.github.com/events')
             retries = 3
             while 1:
                 try:
@@ -241,8 +248,6 @@ class SCChunkResource(MultiProcessWorker):
                     retries -= 1
                     if retries == 0:
                         break
-                #timeout=urllib3.Timeout(connect=10.0, read=30.0),
-                #retries=urllib3.Retry(total=5))
 
 
  
