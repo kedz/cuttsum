@@ -330,6 +330,7 @@ if __name__ == u"__main__":
                         choices=[ 
         "cuttsum.trecdata.UrlListResource", 
         "cuttsum.trecdata.SCChunkResource",
+        "cuttsum.trecdata.SCChunkValidatorResource",
         "cuttsum.pipeline.ArticlesResource",
         "cuttsum.pipeline.DedupedArticlesResource",
         "cuttsum.pipeline.SentenceFeaturesResource",
