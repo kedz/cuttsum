@@ -249,58 +249,28 @@ class SCChunkResource(MultiProcessWorker):
                     if retries == 0:
                         break
 
+class SCChunkValidatorResource(MultiProcessWorker):
+    def __init__(self):
+        pass
 
- 
-    #### clean out code below this point ###
+    def get_job_units(self, event, corpus, **kwargs):
+        preroll = kwargs.get("preroll", 0)
+        
+        num_hours = len(event.list_event_hours(preroll=preroll))
+        units = [i for i in xrange(num_hours)]
+        return units
 
-    def check_coverage(self, event, corpus, domains=None,
-        preroll=0, **kwargs):
-        n_chunks = 0
-        n_covered = 0
-        for domain, count, path, url in self.get_chunk_info_paths_urls(
-            event, corpus, preroll=preroll):
-            if domains is None or domain in domains:
-                n_chunks += 1
-                if os.path.exists(path):
-                    n_covered += 1
+    def do_job_unit(self, event, corpus, unit, **kwargs):
+        preroll = kwargs.get("preroll", 0)        
+        hour = event.list_event_hours(preroll=preroll)[unit]
 
-        if n_chunks == 0:
-            return 0
-        coverage = n_covered / float(n_chunks)
-        return coverage
+        res = SCChunkResource()
+        import subprocess        
 
-    def get(self, event, corpus, domains=None, overwrite=False,
-            n_procs=1, progress_bar=False, preroll=0, **kwargs):
-        jobs = []
-        for domain, count, path, url in self.get_chunk_info_paths_urls(
-            event, corpus, preroll=preroll):
-            if domains is None or domain in domains:
-                if overwrite is True or not os.path.exists(path):
-                    jobs.append((path, url))
-
-        self.do_work(scchunk_worker_, jobs, n_procs, progress_bar)
-        return True
-
-def scchunk_worker_(job_queue, result_queue, **kwargs):
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-    gpg = GPG()
-    http = urllib3.PoolManager(timeout=15.0, retries=3)
-
-    while not job_queue.empty():
-        try:
-            path, url = job_queue.get(block=False)
-            parent = os.path.dirname(path)
-            if not os.path.exists(parent):
-                try:
-                    os.makedirs(parent)
-                except OSError as e:
-                    if e.errno == errno.EEXIST and os.path.isdir(parent):
-                        pass
-
-            r = http.request('GET', url)
-            with open(path, u'wb') as f:
-                f.write(str(gpg.decrypt(r.data)))
-            result_queue.put(None)
-        except Queue.Empty:
-            pass
+        for path in res.get_chunks_for_hour(hour, corpus):
+            gold_checksum = path.split("-")[-1].replace(".sc.xz", "")
+            o = subprocess.check_output("xzcat {} | md5sum".format(path), shell=True)
+            checksum = o.split(" ")[0].strip()
+            if checksum != gold_checksum:
+                print checksum,"!=", gold_checksum, "removing path", path
+                os.remove(path)
