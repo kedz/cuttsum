@@ -85,19 +85,31 @@ def get_2013_updates():
 
     return df
 
-def get_merged_dataframe():
-    matches = get_2013_matches()
-    updates = get_2013_updates()
-    nuggets = get_2013_nuggets()
+def get_2014_sampled_updates():
+    updates_tsv = resource_filename(
+        u'cuttsum', os.path.join(u'2014-data', u'updates_sampled.tsv.gz'))
+ 
+    with gzip.open(updates_tsv, u'r') as f:
+        df = pd.io.parsers.read_csv(
+            f, sep='\t', quoting=3, header=0,
+            names=[u'query id', u'update id', u'document id',
+                   u'sentence id', u'length', u'duplicate id', u'text'])
 
+    return df
+
+
+
+
+def get_merged_dataframe():
+    matches = pd.concat([get_2013_matches(), get_2014_matches()])
+    updates = pd.concat([get_2013_updates(), get_2014_sampled_updates()])
+    nuggets = pd.concat([get_2013_nuggets(), get_2014_nuggets()])
     match_cols = (matches.columns.difference(updates.columns)).tolist()
     match_cols += [u"update id"]
 
     matches_updates = pd.merge(
         left=matches[match_cols], right=updates, on="update id")
 
-    #nugget_cols = (nuggets.columns.difference(
-    #    matches_updates.columns)).tolist()
     matches_updates.rename(columns={u"text": u"update text"}, inplace=True)
     nuggets.rename(
         columns={u"text": u"nugget text", 
@@ -107,7 +119,3 @@ def get_merged_dataframe():
         u'nugget text']
    
     return pd.merge(left=nuggets[nugget_cols], right=matches_updates, on="nugget id")
-    #print matches_updates.columns.tolist()
-    #print nuggets.columns.tolist()
-    #import sys
-    #3sys.exit()
