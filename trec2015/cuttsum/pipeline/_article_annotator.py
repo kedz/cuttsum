@@ -5,6 +5,7 @@ import cuttsum.judgements
 import signal
 import urllib3
 import os
+import errno
 import Queue
 import gzip
 import regex as re
@@ -139,6 +140,15 @@ class ArticlesResource(MultiProcessWorker):
         extractor = kwargs.get("extractor", "gold")
         data_dir = os.path.join(self.dir_, extractor, event.fs_name())
         chunks_resource = SCChunkResource()
+
+        if not os.path.exists(data_dir):	
+            try:
+                os.makedirs(data_dir)
+            except OSError as exc:
+                if exc.errno == errno.EEXIST and os.path.isdir(data_dir):
+                    pass
+
+
         
         if extractor == "gold":
             import cuttsum.judgements
@@ -191,49 +201,52 @@ class ArticlesResource(MultiProcessWorker):
             good_si = []
 
             for path in chunks_resource.get_chunks_for_hour(hour, corpus):
-                with sc.Chunk(path=path, mode="rb", 
-                        message=corpus.sc_msg()) as chunk:
-                    
-                    for si in chunk:
-
-                        if si.body.clean_visible is None:
-                            continue
-
-                        article_text = self._get_goose_text(g, si)
-                        if article_text is None:
-                            continue
-
-                        if not self._contains_query(event, article_text):
-                            continue
-                
-                        art_pretty = sent_tok.tokenize(article_text)
-                        art_sents = [word_tok.tokenize(sent) 
-                                     for sent in art_pretty]
-
-                        df = si2df(si)
-                        I = self._map_goose2streamitem(
-                            art_sents, df["words"].tolist())
-                            
-                        if "serif" in si.body.sentences:
-                            si_sentences = si.body.sentences["serif"]
-                        elif "lingpipe" in si.body.sentences:
-                            si_sentences = si.body.sentences["lingpipe"]
-                        else:
-                            raise Exception("Bad sentence annotator.")
+                try:
+                    with sc.Chunk(path=path, mode="rb", 
+                            message=corpus.sc_msg()) as chunk:
                         
-                        ann = sc.Annotator()
-                        ann.annotator_id = "goose"
-                        si.body.sentences["goose"] = [sc.Sentence() 
-                                                      for _ in si_sentences]
-                        for i_goose, i_si in enumerate(I):
-                            print art_pretty[i_goose]
-                            print df.loc[i_si, "sent text"]
-                            print
-                            tokens = [sc.Token(token=token.encode("utf-8")) 
-                                      for token in art_sents[i_goose]]
-                            si.body.sentences["goose"][i_si].tokens.extend(
-                                tokens)
-                        good_si.append(si)
+                        for si in chunk:
+
+                            if si.body.clean_visible is None:
+                                continue
+
+                            article_text = self._get_goose_text(g, si)
+                            if article_text is None:
+                                continue
+
+                            if not self._contains_query(event, article_text):
+                                continue
+                    
+                            art_pretty = sent_tok.tokenize(article_text)
+                            art_sents = [word_tok.tokenize(sent) 
+                                         for sent in art_pretty]
+
+                            df = si2df(si)
+                            I = self._map_goose2streamitem(
+                                art_sents, df["words"].tolist())
+                                
+                            if "serif" in si.body.sentences:
+                                si_sentences = si.body.sentences["serif"]
+                            elif "lingpipe" in si.body.sentences:
+                                si_sentences = si.body.sentences["lingpipe"]
+                            else:
+                                raise Exception("Bad sentence annotator.")
+                            
+                            ann = sc.Annotator()
+                            ann.annotator_id = "goose"
+                            si.body.sentences["goose"] = [sc.Sentence() 
+                                                          for _ in si_sentences]
+                            for i_goose, i_si in enumerate(I):
+                                #print art_pretty[i_goose]
+                                #print df.loc[i_si, "sent text"]
+                                #print
+                                tokens = [sc.Token(token=token.encode("utf-8")) 
+                                          for token in art_sents[i_goose]]
+                                si.body.sentences["goose"][i_si].tokens.extend(
+                                    tokens)
+                            good_si.append(si)
+                except ValueError:
+                    continue
             #if len(good_si) == 0:
             #    print "Nothing in hour:", hour
             #    return 
@@ -247,6 +260,9 @@ class ArticlesResource(MultiProcessWorker):
             good_si.sort(key=lambda x: x.stream_id)
             for si in good_si:
                 print si.stream_id
+
+            if os.path.exists(output_path):
+                os.remove(output_path)                
 
             print "Writing to", output_path
             with sc.Chunk(path=output_path, mode="wb", 
