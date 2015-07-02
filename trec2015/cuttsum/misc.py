@@ -149,8 +149,13 @@ def si2df(si, extractor=None):
 
     sents = []
     if extractor is None or extractor == "gold":
+        
+        if "serif" in si.body.sentences:
+            ann = "serif"
+        else:
+            ann = "lingpipe"
     
-        for s, sent in enumerate(si.body.sentences["lingpipe"]):
+        for s, sent in enumerate(si.body.sentences[ann]):
             sents.append({
                 "timestamp": int(si.stream_id.split("-")[0]),
                 "sent id": s,
