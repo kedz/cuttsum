@@ -204,7 +204,6 @@ class DedupedArticlesResource(MultiProcessWorker):
 
         for hour, path, si in si_iter:
             df = si2df(si, extractor=extractor)
-
             counts = make_counts(df)
             x = hasher.transform([counts.items()])
             x.shape = (1, hasher.n_features)
