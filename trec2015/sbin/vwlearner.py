@@ -1,7 +1,6 @@
 import cuttsum.events
 import cuttsum.corpora
-from cuttsum.l2s import (SelectLexNextOracle, SelectLexNextLex,
-    SelectLexNextLexCache, SelectLexGenericNextOracle)
+from cuttsum.l2s import *
 from cuttsum.pipeline import InputStreamResource
 import pyvw
 import pandas as pd
@@ -11,7 +10,8 @@ import random
 import matplotlib.pylab as plt
 plt.style.use('ggplot')
 
-def score_sequence(actions, dataframes):
+def evaluate_sequence(actions, dataframes):
+    
 
     all_nuggets = set(
         [n for df in dataframes 
@@ -249,7 +249,8 @@ def downsample(training_instances, size=90):
     return ds_insts
 
 
-def main(learner, training_ids, test_ids, n_iters, report_dir_base):
+def main(learner, training_ids, test_ids, sample_size, 
+         n_iters, report_dir_base):
 
     extractor = "goose" 
     topk = 20
@@ -292,10 +293,14 @@ def main(learner, training_ids, test_ids, n_iters, report_dir_base):
         task = vw.init_search_task(SelectLexNextLexCache)
     elif learner == "SelectLexGenericNextOracle":
         task = vw.init_search_task(SelectLexGenericNextOracle)
+    elif learner == "SelectBasicNextBias":
+        task = vw.init_search_task(SelectBasicNextBias)
+    elif learner == "SelectBasicNextBiasDocAvg":
+        task = vw.init_search_task(SelectBasicNextBiasDocAvg)
     
     for n_iter in range(n_iters):
         print "iter", n_iter + 1
-        ds = downsample(training_insts)
+        ds = downsample(training_insts, size=sample_size)
         task.learn(ds)
         all_train_df = [df for inst in training_insts for df in inst[1]]
         feature_weights = task.get_feature_weights(all_train_df)
@@ -305,16 +310,19 @@ def main(learner, training_ids, test_ids, n_iters, report_dir_base):
         for event, dataframes in training_insts:
             # Predict a sequence for this training examples and see if it is sensible.
             print "PREDICTING", event.fs_name()
-            sequence = task.predict((event, dataframes))
+            sequence, scores = task.predict_with_scores((event, dataframes))
             print sequence
-            make_report(event, dataframes, sequence, "train", n_iter, report_dir_base)
+            make_report(event, dataframes, sequence, scores, "train", n_iter,
+                report_dir_base)
+
 
         for event, dataframes in test_insts:
             # Predict a sequence for this training examples and see if it is sensible.
             print "PREDICTING", event.fs_name()
-            sequence = task.predict((event, dataframes))
+            sequence, scores = task.predict_with_scores((event, dataframes))
             print sequence
-            make_report(event, dataframes, sequence, "test", n_iter, report_dir_base)
+            make_report(event, dataframes, sequence, scores, "test", n_iter,
+                report_dir_base)
 
 def write_model(feature_weights, report_dir_base, n_iter):
     dirname = os.path.join(report_dir_base, "iter-{}".format(n_iter + 1))
@@ -327,11 +335,19 @@ def write_model(feature_weights, report_dir_base, n_iter):
             f.write("{}\t{}\t{}\n".format(fw[0][:1], fw[0][2:], fw[1]))
     
 
-def make_report(event, dataframes, sequence, part, n_iter, report_dir_base):
+def make_report(event, dataframes, sequence, scores, part, n_iter, report_dir_base):
 
     # Run through the sequence of decisions.
-    df = score_sequence(sequence, dataframes)
-    print df[df.columns[1:-1]]
+    df = evaluate_sequence(sequence, dataframes)
+    df = pd.concat([df, scores], axis=1)
+    ns = ['a', 'b', 'c', 'd', 'e', 'f']
+    l_ns = map(lambda x: "l_" + x, ns)
+    o_ns = map(lambda x: "o_" + x, ns)
+
+    cols = [u'acc', u'rec', u'avg. gain', u'action', u'gain', 
+            u'max gain', #u'num nuggets', u'max nuggets',
+            u'min select score', u'next score',] + l_ns + o_ns
+    print df[cols]
                 
     report_dir = os.path.join(
         report_dir_base, "iter-{}".format(n_iter + 1), part)
@@ -352,7 +368,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(u"--learner", type=unicode, choices=[
         u"SelectLexNextOracle", u"SelectLexNextLex", "SelectLexNextLexCache",
-        u"SelectLexGenericNextOracle"],
+        u"SelectLexGenericNextOracle", u"SelectBasicNextBias",
+        u"SelectBasicNextBiasDocAvg"],
         help=u"Learner to run.")
 
     parser.add_argument(u"--training-event-ids", type=int, nargs=u"+",
@@ -363,6 +380,8 @@ if __name__ == "__main__":
                         help=u"Where to right outputs.")
     parser.add_argument(u"--num-iters", type=int,
                         help=u"training iters")
+    parser.add_argument(u"--sample-size", type=int, default=90,
+                        help=u"down sample size")
 
     args = parser.parse_args()
 
@@ -373,5 +392,6 @@ if __name__ == "__main__":
     training_ids = args.training_event_ids    
     test_ids = args.test_event_ids
     learner = args.learner
+    sample_size = args.sample_size
 
-    main(learner, training_ids, test_ids, n_iters, report_dir)
+    main(learner, training_ids, test_ids, sample_size, n_iters, report_dir)
