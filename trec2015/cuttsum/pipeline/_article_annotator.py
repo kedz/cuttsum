@@ -46,11 +46,14 @@ class ArticlesResource(MultiProcessWorker):
         for hour in event.list_event_hours():
             path = self.get_chunk_path(event, extractor, hour)
             if os.path.exists(path):
-            
-                with sc.Chunk(path=path, mode="rb", 
-                        message=corpus.sc_msg()) as chunk:
-                    for si in chunk:
-                        yield hour, path, si   
+                print path
+                try: 
+                    with sc.Chunk(path=path, mode="rb", 
+                            message=corpus.sc_msg()) as chunk:
+                        for si in chunk:
+                            yield hour, path, si   
+                except IOError, msg:
+                    print msg
 
     def dataframe_iter(self, event, corpus, extractor, include_matches=None):
 
@@ -245,7 +248,7 @@ class ArticlesResource(MultiProcessWorker):
                                 si.body.sentences["goose"][i_si].tokens.extend(
                                     tokens)
                             good_si.append(si)
-                except ValueError:
+                except TypeError:
                     continue
             #if len(good_si) == 0:
             #    print "Nothing in hour:", hour
