@@ -345,10 +345,12 @@ class ArticlesResource(MultiProcessWorker):
     def get_chunk_path(self, event, extractor, hour):
         data_dir = os.path.join(self.dir_, extractor, event.fs_name())
         hour_str = "{}.sc.gz".format(hour.strftime(u'%Y-%m-%d-%H'))
+        if not os.path.exists(data_dir):
+            return None
         files = [fname for fname in os.listdir(data_dir) 
                  if fname.endswith(hour_str)]
         if len(files) == 0:
-            return os.path.join(data_dir, hour_str)
+            return os.path.join(data_dir, "0-"+hour_str)
         else:
             return os.path.join(data_dir, files[0])
 
