@@ -28,6 +28,7 @@ articles_res = ArticlesResource()
 ded_articles_res = DedupedArticlesResource()
 data = []
 for event in cuttsum.events.get_events():
+    
     corpus = cuttsum.corpora.get_raw_corpus(event)
     hours = event.list_event_hours()
 
@@ -43,12 +44,21 @@ for event in cuttsum.events.get_events():
                 hour2ded_fltr[hour] += 1
 
     hour2goose = defaultdict(int)
-    goose_df = articles_res.get_stats_df(event, "goose")
-    if goose_df is not None:
-        for _, row in goose_df.iterrows():
-            dt = datetime.utcfromtimestamp(row["hour"])
-            hour = datetime(dt.year, dt.month, dt.day, dt.hour)
-            hour2goose[hour] = row["goose articles"]
+
+    for hour in hours:
+        path = articles_res.get_chunk_path(event, "goose", hour)
+        if path is None:
+            continue
+        print path
+        fname = os.path.split(path)[1]
+        num_goose = int(fname.split("-")[0])
+        hour2goose[hour] = num_goose
+#    goose_df = articles_res.get_stats_df(event, "goose")
+#    if goose_df is not None:
+#        for _, row in goose_df.iterrows():
+#            dt = datetime.utcfromtimestamp(row["hour"])
+#            hour = datetime(dt.year, dt.month, dt.day, dt.hour)
+#            hour2goose[hour] = row["goose articles"]
                        
  
     for hour in hours:
@@ -81,7 +91,10 @@ df_sum["raw articles"] = df_sum["raw articles"].apply(format_int)
 df_sum["goose articles"] = df_sum["goose articles"].apply(format_int)
 df_sum["deduped articles"] = df_sum["deduped articles"].apply(format_int)
 df_sum["deduped match articles"] = df_sum["deduped match articles"].apply(format_int)
+
+
 print df_sum
+exit()
 with open("article_count.tex", "w") as f:
     f.write(df_sum.to_latex())
 
