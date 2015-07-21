@@ -6,7 +6,9 @@ import gzip
 import corenlp as cnlp
 import os
 import re
+from itertools import izip
 import numpy as np
+from nltk.corpus import wordnet as wn
 import pandas as pd
 pd.set_option('display.width', 1000)
 
@@ -59,10 +61,10 @@ class SentenceFeaturesResource(MultiProcessWorker):
 
         domain_lm_config = service_configs[event2lm_name(event)]
         domain_lm_port = int(domain_lm_config["port"])      
-	domain_lm_order = int(domain_lm_config.get("order", 3))	
-	gw_lm_config = service_configs["gigaword-lm"]  
+        domain_lm_order = int(domain_lm_config.get("order", 3))	
+        gw_lm_config = service_configs["gigaword-lm"]  
         gw_lm_port = int(gw_lm_config["port"])        
-	gw_lm_order = int(gw_lm_config.get("order", 3))	
+        gw_lm_order = int(gw_lm_config.get("order", 3))	
 
 
         thresh = kwargs.get("dedupe-sim-threshold", .8)
@@ -76,6 +78,30 @@ class SentenceFeaturesResource(MultiProcessWorker):
         domain_lm = cuttsum.srilm.Client(domain_lm_port, domain_lm_order, True)
         gw_lm = cuttsum.srilm.Client(gw_lm_port, gw_lm_order, True)
         cnlp_client = cnlp.client.CoreNLPClient(port=cnlp_port)
+
+        def make_query_synsets():
+            synonyms = []
+            hypernyms = []
+            hyponyms = [] 
+            print event.type.split(' ')[0]
+            for synset in wn.synsets(event.type.split(' ')[0]):
+                synonyms.extend(
+                    [lemma.name().lower().replace(u'_', u' ').encode(u'utf-8')
+                     for lemma in synset.lemmas()])
+
+                hypernyms.extend(
+                    [lemma.name().lower().replace(u'_', u' ').encode(u'utf-8')
+                     for synset in synset.hypernyms()
+                     for lemma in synset.lemmas()])
+
+                hyponyms.extend(
+                    [lemma.name().lower().replace(u'_', u' ').encode(u'utf-8')
+                     for synset in synset.hyponyms()
+                     for lemma in synset.lemmas()])
+            print hypernyms
+            print hyponyms
+            print synonyms
+            return set(synonyms), set(hypernyms), set(hyponyms)
 
         def heal_text(sent_text):
             sent_text = re.sub(
@@ -160,6 +186,9 @@ class SentenceFeaturesResource(MultiProcessWorker):
         mention_counts = defaultdict(int)
         total_mentions = 0
 
+
+        synonyms, hypernyms, hyponyms = make_query_synsets()
+
         path = self.get_path(
             event, corpus, extractor, thresh)
         dirname = os.path.dirname(path)
@@ -173,6 +202,7 @@ class SentenceFeaturesResource(MultiProcessWorker):
             "BASIC doc position", "BASIC all caps ratio", 
             "BASIC upper ratio", "BASIC lower ratio",
             "BASIC punc ratio", "BASIC person ratio", 
+            "BASIC location ratio",
             "BASIC organization ratio", "BASIC date ratio", 
             "BASIC time ratio", "BASIC duration ratio",
             "BASIC number ratio", "BASIC ordinal ratio",
@@ -180,10 +210,21 @@ class SentenceFeaturesResource(MultiProcessWorker):
             "BASIC set ratio", "BASIC misc ratio"]
        
 
-        lm_cols = ["LM domain lp", "LM domain avg lp",
-                   "LM gw lp", "LM gw avg lp"]
+        #lm_cols = ["LM domain lp", "LM domain avg lp",
+        #           "LM gw lp", "LM gw avg lp"]
+
+        query_cols = [
+            "Q_query_sent_cov",
+            "Q_sent_query_cov",
+            "Q_syn_sent_cov",
+            "Q_sent_syn_cov",
+            "Q_hyper_sent_cov",
+            "Q_sent_hyper_cov",
+            "Q_hypo_sent_cov",
+            "Q_sent_hypo_cov",
+        ]
  
-        all_cols = meta_cols + basic_cols + lm_cols
+        all_cols = meta_cols + basic_cols + query_cols #+ lm_cols
 
         with gzip.open(path, "w") as f:
             f.write("\t".join(all_cols) + "\n")
@@ -326,6 +367,13 @@ class SentenceFeaturesResource(MultiProcessWorker):
                 df["LM gw lp"] = gw_log_probs
                 df["LM gw avg lp"] = gw_avg_log_probs
 
+
+                ### Query Features ###
+
+                self.compute_query_features(df, 
+                    set([q.lower() for q in event.query]),
+                    synonyms, hypernyms, hyponyms)
+
                 ### Write dataframe to file ###
                 df[all_cols].to_csv(f, index=False, header=False, sep="\t")
                 
@@ -348,3 +396,77 @@ class SentenceFeaturesResource(MultiProcessWorker):
             #print df[["lm", "sent text"]]
             #print 
 
+    def compute_query_features(self, df, 
+            query, synonyms, hypernyms, hyponyms):
+
+        query_sent_covs = []
+        sent_query_covs = []
+        syn_sent_covs = []
+        sent_syn_covs = []
+        hyper_sent_covs = []
+        sent_hyper_covs = []
+        hypo_sent_covs = []
+        sent_hypo_covs = []
+
+        for tokens, lemmas in izip(
+                df["tokens"].tolist(), df["lemmas"].tolist()):
+
+            query_sent_cov = 0
+            sent_query_cov = 0
+            syn_sent_cov = 0
+            sent_syn_cov = 0
+            hyper_sent_cov = 0
+            sent_hyper_cov = 0
+            hypo_sent_cov = 0
+            sent_hypo_cov = 0
+
+            tokens = set([t.lower() for t in tokens])
+            lemmas = set(lemmas)
+            for q in query:
+                if q in tokens or q in lemmas:
+                    query_sent_cov += 1
+                    sent_query_cov += 1
+
+            sent_query_cov /= float(len(query))
+            sent_query_covs.append(sent_query_cov)
+            query_sent_cov /= float(len(tokens))
+            query_sent_covs.append(query_sent_cov)
+        
+            for s in synonyms:
+                if s in tokens or s in lemmas:
+                    syn_sent_cov += 1
+                    sent_syn_cov += 1
+            sent_syn_cov /= float(len(synonyms))
+            sent_syn_covs.append(sent_syn_cov)
+            syn_sent_cov /= float(len(tokens))
+            syn_sent_covs.append(syn_sent_cov)
+ 
+            for s in hyponyms:
+                if s in tokens or s in lemmas:
+                    hypo_sent_cov += 1
+                    sent_hypo_cov += 1
+            sent_hypo_cov /= float(len(hyponyms))
+            sent_hypo_covs.append(sent_hypo_cov)
+            hypo_sent_cov /= float(len(tokens))
+            hypo_sent_covs.append(hypo_sent_cov)
+ 
+            for s in hypernyms:
+                if s in tokens or s in lemmas:
+                    hyper_sent_cov += 1
+                    sent_hyper_cov += 1
+            sent_hyper_cov /= float(len(hypernyms))
+            sent_hyper_covs.append(sent_hyper_cov)
+            hyper_sent_cov /= float(len(tokens))
+            hyper_sent_covs.append(hyper_sent_cov)
+ 
+        df["Q_query_sent_cov"] = query_sent_covs
+        df["Q_sent_query_cov"] = sent_query_covs
+
+        df["Q_syn_sent_cov"] = syn_sent_covs
+        df["Q_sent_syn_cov"] = sent_syn_covs
+
+        df["Q_hypo_sent_cov"] = hypo_sent_covs
+        df["Q_sent_hypo_cov"] = sent_hypo_covs
+
+        df["Q_hyper_sent_cov"] = hyper_sent_covs
+        df["Q_sent_hyper_cov"] = sent_hyper_covs
