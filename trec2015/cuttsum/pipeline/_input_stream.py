@@ -60,7 +60,7 @@ class InputStreamResource(MultiProcessWorker):
         if not os.path.exists(dirname): os.makedirs(dirname)
 
         cols = ["update id", "stream id", "sent id", "timestamp", 
-                "sent text", "nuggets"]
+                "sent text", "nuggets", "n conf"]
 
         ling_cols = [
             "pretty text", "tokens", "lemmas", "pos", "ne", "tokens stopped",
@@ -70,6 +70,7 @@ class InputStreamResource(MultiProcessWorker):
             "BASIC doc position", "BASIC all caps ratio",
             "BASIC upper ratio", "BASIC lower ratio",
             "BASIC punc ratio", "BASIC person ratio",
+            "BASIC location ratio",
             "BASIC organization ratio", "BASIC date ratio",
             "BASIC time ratio", "BASIC duration ratio",
             "BASIC number ratio", "BASIC ordinal ratio",
@@ -79,7 +80,18 @@ class InputStreamResource(MultiProcessWorker):
         lm_cols = ["LM domain lp", "LM domain avg lp",
                    "LM gw lp", "LM gw avg lp"]
 
-        output_cols = cols + ling_cols + basic_cols + lm_cols
+        query_cols = [
+            "Q_query_sent_cov",
+            "Q_sent_query_cov",
+            "Q_syn_sent_cov",
+            "Q_sent_syn_cov",
+            "Q_hyper_sent_cov",
+            "Q_sent_hyper_cov",
+            "Q_hypo_sent_cov",
+            "Q_sent_hypo_cov",
+        ]
+ 
+        output_cols = cols + ling_cols + basic_cols + lm_cols + query_cols
 
         with gzip.open(path, "w") as f:
             f.write("\t".join(output_cols) + "\n")

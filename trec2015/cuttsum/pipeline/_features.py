@@ -210,8 +210,8 @@ class SentenceFeaturesResource(MultiProcessWorker):
             "BASIC set ratio", "BASIC misc ratio"]
        
 
-        #lm_cols = ["LM domain lp", "LM domain avg lp",
-        #           "LM gw lp", "LM gw avg lp"]
+        lm_cols = ["LM domain lp", "LM domain avg lp",
+                   "LM gw lp", "LM gw avg lp"]
 
         query_cols = [
             "Q_query_sent_cov",
@@ -224,7 +224,7 @@ class SentenceFeaturesResource(MultiProcessWorker):
             "Q_sent_hypo_cov",
         ]
  
-        all_cols = meta_cols + basic_cols + query_cols #+ lm_cols
+        all_cols = meta_cols + basic_cols + query_cols + lm_cols
 
         with gzip.open(path, "w") as f:
             f.write("\t".join(all_cols) + "\n")

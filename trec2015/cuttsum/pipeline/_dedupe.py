@@ -100,6 +100,8 @@ class DedupedArticlesResource(MultiProcessWorker):
                     lambda x: set(
                         matches[
                             matches["update id"] == x]["nugget id"].tolist()))
+                df["n conf"] = df["update id"].apply(lambda x: 1 if x in judged_uids else None)
+                
 
             if include_matches == "soft":
                 ### NOTE BENE: geting an array of indices to index unjudged
