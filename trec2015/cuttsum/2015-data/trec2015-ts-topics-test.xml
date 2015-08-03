@@ -1,0 +1,149 @@
+<events>
+  <event>
+    <id>26</id>
+    <start>1358323140</start>
+    <end>1359619140</end>
+    <query>vauxhall helicopter crash</query>
+    <type>accident</type>
+  </event>
+  <event>
+    <id>27</id>
+    <start>1351296000</start>
+    <end>1351814400</end>
+    <query>cyclone nilam</query>
+    <type>storm</type>
+  </event>
+  <event>
+    <id>28</id>
+    <start>1366771500</start>
+    <end>1367635500</end>
+    <query>savar building collapse</query>
+    <type>accident</type>
+  </event>
+  <event>
+    <id>29</id>
+    <start>1361455080</start>
+    <end>1362319080</end>
+    <query>hyderabad explosion</query>
+    <type>bombing</type>
+  </event>
+  <event>
+    <id>30</id>
+    <start>1330844400</start>
+    <end>1331708400</end>
+    <query>brazzaville explosion</query>
+    <type>accident</type>
+  </event>
+  <event>
+    <id>31</id>
+    <start>1343596680</start>
+    <end>1344028680</end>
+    <query>india power blackouts</query>
+    <type>accident</type>
+  </event>
+  <event>
+    <id>32</id>
+    <start>1347321600</start>
+    <end>1348963200</end>
+    <query>innocence of muslims protests</query>
+    <type>protest</type>
+  </event>
+  <event>
+    <id>33</id>
+    <start>1357776000</start>
+    <end>1358553600</end>
+    <query>konna battle</query>
+    <type>conflict</type>
+  </event>
+  <event>
+    <id>34</id>
+    <start>1360972800</start>
+    <end>1361318400</end>
+    <query>quetta bombing</query>
+    <type>bombing</type>
+  </event>
+  <event>
+    <id>35</id>
+    <start>1365984000</start>
+    <end>1366416000</end>
+    <query>iraq bombing</query>
+    <type>bombing</type>
+  </event>
+  <event>
+    <id>36</id>
+    <start>1363651200</start>
+    <end>1364083200</end>
+    <query>iraq bombing</query>
+    <type>bombing</type>
+  </event>
+  <event>
+    <id>37</id>
+    <start>1325149200</start>
+    <end>1325754000</end>
+    <query>los angeles arson</query>
+    <type>bombing</type>
+  </event>
+  <event>
+    <id>38</id>
+    <start>1365033600</start>
+    <end>1365811200</end>
+    <query>thane building collapsed</query>
+    <type>accident</type>
+  </event>
+  <event>
+    <id>39</id>
+    <start>1359676800</start>
+    <end>1360022400</end>
+    <query>suicide bomber ankara</query>
+    <type>bombing</type>
+  </event>
+  <event>
+    <id>40</id>
+    <start>1324501200</start>
+    <end>1324933200</end>
+    <query>baghdad bomb</query>
+    <type>bombing</type>
+  </event>
+  <event>
+    <id>41</id>
+    <start>1358208000</start>
+    <end>1359072000</end>
+    <query>aleppo university explosion</query>
+    <type>bombing</type>
+  </event>
+  <event>
+    <id>42</id>
+    <start>1360454400</start>
+    <end>1360886400</end>
+    <query>carnival triumph fire</query>
+    <type>accident</type>
+  </event>
+  <event>
+    <id>43</id>
+    <start>1358380800</start>
+    <end>1358812800</end>
+    <query>uss guardian grounding</query>
+    <type>accident</type>
+  </event>
+  <event>
+    <id>44</id>
+    <start>1334102400</start>
+    <end>1334534400</end>
+    <query>aceh earthquake</query>
+    <type>earthquake</type>
+  </event>
+  <event>
+    <id>45</id>
+    <start>1351393200</start>
+    <end>1352257200</end>
+    <query>haida gwaii earthquake</query>
+    <type>earthquake</type>
+  </event>
+  <event>
+    <id>46</id>
+    <start>1347321600</start>
+    <end>1347753600</end>
+    <query>catalan protest</query>
+    <type>protest</type>
+  </event>
+</events>

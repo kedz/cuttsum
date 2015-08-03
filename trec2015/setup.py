@@ -40,6 +40,9 @@ def setup_package_data():
             # Complete set of 2014 updates from our official run submissions. 
             os.path.join(u'2014-data', u'cunlp-updates.ssv.gz'),
 
+            # 2015 test event xml
+            os.path.join(u"2015-data", u'trec2015-ts-topics-test.xml'),
+
             # Article Classifier Model.
             os.path.join(u'models'),
             os.path.join(u'models', u'article_clf.pkl'),      

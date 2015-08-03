@@ -10,7 +10,9 @@ def get_events(by_query_ids=None, by_event_types=None):
                                   by_event_types=by_event_types)
     events_2014 = get_2014_events(by_query_ids=by_query_ids, 
                                   by_event_types=by_event_types)
-    return events_2013 + events_2014
+    events_2015 = get_2015_events(by_query_ids=by_query_ids, 
+                                  by_event_types=by_event_types)
+    return events_2013 + events_2014 + events_2015
 
 def get_2013_events(by_query_ids=None, by_event_types=None):
     event_xml = resource_stream(
@@ -25,6 +27,13 @@ def get_2014_events(by_query_ids=None, by_event_types=None):
             u'2014-data', u'trec2014-ts-topics-test.xml'))
     return read_events(event_xml, by_query_ids=by_query_ids, 
                        by_event_types=by_event_types, prefix='TS14.')
+
+def get_2015_events(by_query_ids=None, by_event_types=None):
+    event_xml = resource_stream(
+        u'cuttsum', os.path.join(
+            u'2015-data', u'trec2015-ts-topics-test.xml'))
+    return read_events(event_xml, by_query_ids=by_query_ids, 
+                       by_event_types=by_event_types, prefix='TS15.')
 
 def read_events(event_xml, by_query_ids=None, by_event_types=None, prefix=''):
     if isinstance(by_query_ids, list):
