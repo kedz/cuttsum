@@ -16,7 +16,7 @@ def start_service(service, service_configs):
         cnlp.server.start(
             port=port,
             mem=mem, threads=threads, max_message_len=max_message_len,
-            annotators=["tokenize", "ssplit", "pos", "lemma", "ner"],
+            annotators=["tokenize", "ssplit", "pos", "lemma", "ner", "parse"],
             corenlp_props={
                 "pos.maxlen": "150",
                 "ssplit.eolonly": "true"})
@@ -336,6 +336,7 @@ if __name__ == u"__main__":
         "cuttsum.pipeline.SentenceFeaturesResource",
         "cuttsum.pipeline.InputStreamResource",
         "cuttsum.classifiers.NuggetClassifier",
+        "cuttsum.classifiers.NuggetRegressor",
         "cuttsum.summarizers.RetrospectiveMonotoneSubmodularOracle",
         "cuttsum.summarizers.MonotoneSubmodularOracle",
         ])
