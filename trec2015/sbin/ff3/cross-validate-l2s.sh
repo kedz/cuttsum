@@ -1,0 +1,28 @@
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 100 --samples-per-event 10 --iters 20 --l2 .01 --output-dir "ssize.100.spe.10.iters.20.l2..01"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 100 --samples-per-event 100 --iters 20 --l2 .01 --output-dir "ssize.100.spe.100.iters.20.l2..01"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 100 --samples-per-event 10 --iters 20 --l2 .1 --output-dir "ssize.100.spe.10.iters.20.l2..1"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 100 --samples-per-event 100 --iters 20 --l2 .1 --output-dir "ssize.100.spe.100.iters.20.l2..1"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 100 --samples-per-event 10 --iters 20 --l2 1. --output-dir "ssize.100.spe.10.iters.20.l2.1"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 100 --samples-per-event 100 --iters 20 --l2 1. --output-dir "ssize.100.spe.100.iters.20.l2.1"
+
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 200 --samples-per-event 10 --iters 20 --l2 .01 --output-dir "ssize.200.spe.10.iters.20.l2..01"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 200 --samples-per-event 100 --iters 20 --l2 .01 --output-dir "ssize.200.spe.100.iters.20.l2..01"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 200 --samples-per-event 10 --iters 20 --l2 .1 --output-dir "ssize.200.spe.10.iters.20.l2..1"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 200 --samples-per-event 100 --iters 20 --l2 .1 --output-dir "ssize.200.spe.100.iters.20.l2..1"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 200 --samples-per-event 10 --iters 20 --l2 1. --output-dir "ssize.200.spe.10.iters.20.l2.1"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 200 --samples-per-event 100 --iters 20 --l2 1. --output-dir "ssize.200.spe.100.iters.20.l2.1"
+
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 300 --samples-per-event 10 --iters 20 --l2 .01 --output-dir "ssize.300.spe.10.iters.20.l2..01"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 300 --samples-per-event 100 --iters 20 --l2 .01 --output-dir "ssize.300.spe.100.iters.20.l2..01"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 300 --samples-per-event 10 --iters 20 --l2 .1 --output-dir "ssize.300.spe.10.iters.20.l2..1"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 300 --samples-per-event 100 --iters 20 --l2 .1 --output-dir "ssize.300.spe.100.iters.20.l2..1"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 300 --samples-per-event 10 --iters 20 --l2 1. --output-dir "ssize.300.spe.10.iters.20.l2.1"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 300 --samples-per-event 100 --iters 20 --l2 1. --output-dir "ssize.300.spe.100.iters.20.l2.1"
+
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 500 --samples-per-event 10 --iters 20 --l2 .01 --output-dir "ssize.500.spe.10.iters.20.l2..01"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 500 --samples-per-event 100 --iters 20 --l2 .01 --output-dir "ssize.500.spe.100.iters.20.l2..01"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 500 --samples-per-event 10 --iters 20 --l2 .1 --output-dir "ssize.500.spe.10.iters.20.l2..1"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 500 --samples-per-event 100 --iters 20 --l2 .1 --output-dir "ssize.500.spe.100.iters.20.l2..1"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 500 --samples-per-event 10 --iters 20 --l2 1. --output-dir "ssize.500.spe.10.iters.20.l2.1"
+mpirun -n 10 python cross-validate-l2s.py --event-ids 1 2 3 4 5 6 8 9 10 --sample-size 500 --samples-per-event 100 --iters 20 --l2 1. --output-dir "ssize.500.spe.100.iters.20.l2.1"
+
