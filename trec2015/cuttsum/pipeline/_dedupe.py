@@ -88,7 +88,12 @@ class DedupedArticlesResource(MultiProcessWorker):
                 judged = cuttsum.judgements.get_2013_updates() 
                 judged = judged[judged["query id"] == event.query_id]
                 judged_uids = set(judged["update id"].tolist())
+            elif event.query_id.startswith("TS14"):
+                judged = cuttsum.judgements.get_2014_sampled_updates()
+                judged = judged[judged["query id"] == event.query_id]
+                judged_uids = set(judged["update id"].tolist())
             else:
+                
                 raise Exception("Bad corpus!")
 
         for si in self.streamitem_iter(event, corpus, extractor, threshold):
@@ -115,7 +120,10 @@ class DedupedArticlesResource(MultiProcessWorker):
                 unjudged_sents = unjudged["sent text"].tolist()
                 assert len(unjudged_sents) == I.shape[0]
                 if I.shape[0] > 0:
-                    df.loc[I, "nuggets"] = classify_nuggets(unjudged_sents)
+                    nuggets, conf, nugget_probs = classify_nuggets(unjudged_sents)
+                    df.loc[I, "nuggets"] = nuggets
+                    df.loc[I, "n conf"] = conf
+                    
 
 
             yield df
