@@ -1,8 +1,10 @@
 import os
 from cuttsum.resources import MultiProcessWorker
 from cuttsum.pipeline import DedupedArticlesResource, SentenceFeaturesResource
+import cuttsum.judgements
 import gzip
 import pandas as pd
+import numpy as np
 
 class InputStreamResource(MultiProcessWorker):
     def __init__(self):
@@ -26,7 +28,7 @@ class InputStreamResource(MultiProcessWorker):
         if not os.path.exists(path): return []
         
         with gzip.open(path, "r") as f:
-            df = pd.read_csv(f, converters={"nuggets": eval, "lemmas stopped": eval}, sep="\t")
+            df = pd.read_csv(f, converters={"nuggets": eval, "nugget probs": eval, "lemmas stopped": eval}, sep="\t")
             stream = [(sid, group) 
                       for sid, group in df.groupby("stream id")]
             stream.sort(key=lambda x: x[0])
@@ -53,14 +55,56 @@ class InputStreamResource(MultiProcessWorker):
             event, corpus, extractor, thresh)        
         ded_articles_res = DedupedArticlesResource()
         dfiter = ded_articles_res.dataframe_iter(
-            event, corpus, extractor, "soft", thresh)
+            event, corpus, extractor, None, thresh)
+
+        all_matches = cuttsum.judgements.get_merged_dataframe()
+        matches = all_matches[all_matches["query id"] == event.query_id]
+        
+        from cuttsum.classifiers import NuggetClassifier
+        classify_nuggets = NuggetClassifier().get_classifier(event)
+        if event.query_id.startswith("TS13"):
+            judged = cuttsum.judgements.get_2013_updates() 
+            judged = judged[judged["query id"] == event.query_id]
+            judged_uids = set(judged["update id"].tolist())
+        else:
+            raise Exception("Bad corpus!")
+              
+      
+        feats_df["nuggets"] = feats_df["update id"].apply(
+            lambda x: set(
+                matches[matches["update id"] == x]["nugget id"].tolist()))
+        feats_df["n conf"] = feats_df["update id"].apply(lambda x: 1 if x in judged_uids else None)
+                
+
+            #if include_matches == "soft":
+                ### NOTE BENE: geting an array of indices to index unjudged
+                # sentences so I can force pandas to return a view and not a
+                # copy.
+        I = np.where(
+            feats_df["update id"].apply(lambda x: x not in judged_uids))[0]
+        
+        unjudged = feats_df[
+            feats_df["update id"].apply(lambda x: x not in judged_uids)]
+        #unjudged_sents = unjudged["sent text"].tolist()
+        #assert len(unjudged_sents) == I.shape[0]
+        feats_df["nugget probs"] = [dict() for x in xrange(len(feats_df))]
+        if I.shape[0] > 0:
+            nuggets, conf, nugget_probs = classify_nuggets(unjudged)
+            feats_df.loc[I, "nuggets"] = nuggets
+            feats_df.loc[I, "n conf"] = conf
+            feats_df.loc[I, "nugget probs"] = nugget_probs
+
+
+
+
 
         path = self.get_path(event, corpus, extractor, thresh, delay, topk)
         dirname = os.path.dirname(path)
         if not os.path.exists(dirname): os.makedirs(dirname)
 
         cols = ["update id", "stream id", "sent id", "timestamp", 
-                "sent text", "nuggets", "n conf"]
+                "sent text",] 
+        nugget_cols = ["nuggets", "n conf", "nugget probs"]
 
         ling_cols = [
             "pretty text", "tokens", "lemmas", "pos", "ne", "tokens stopped",
@@ -90,8 +134,39 @@ class InputStreamResource(MultiProcessWorker):
             "Q_hypo_sent_cov",
             "Q_sent_hypo_cov",
         ]
+
+        sum_cols = [
+            "SUM_sbasic_sum",
+            "SUM_sbasic_amean",
+            "SUM_sbasic_max",
+            "SUM_novelty_gmean",
+            "SUM_novelty_amean",
+            "SUM_novelty_max",
+            "SUM_centrality",
+            "SUM_pagerank",
+        ]
+    
+        stream_cols = [
+            "STREAM_sbasic_sum",
+            "STREAM_sbasic_amean",
+            "STREAM_sbasic_max",
+            "STREAM_per_prob_sum",
+            "STREAM_per_prob_max",
+            "STREAM_per_prob_amean",
+            "STREAM_loc_prob_sum",
+            "STREAM_loc_prob_max",
+            "STREAM_loc_prob_amean",
+            "STREAM_org_prob_sum",
+            "STREAM_org_prob_max",
+            "STREAM_org_prob_amean",
+            "STREAM_nt_prob_sum",
+            "STREAM_nt_prob_max",
+            "STREAM_nt_prob_amean",
+        ]
+
+
  
-        output_cols = cols + ling_cols + basic_cols + lm_cols + query_cols
+        output_cols = cols + nugget_cols + ling_cols + basic_cols + lm_cols + query_cols + sum_cols + stream_cols
 
         with gzip.open(path, "w") as f:
             f.write("\t".join(output_cols) + "\n")
