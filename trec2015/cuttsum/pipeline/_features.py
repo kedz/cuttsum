@@ -11,7 +11,12 @@ import numpy as np
 from nltk.corpus import wordnet as wn
 import pandas as pd
 pd.set_option('display.width', 1000)
-
+from sklearn.metrics.pairwise import cosine_similarity
+from scipy.stats import gmean
+import numpy as np
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.feature_extraction import DictVectorizer
+from collections import defaultdict
 
 
 class SentenceFeaturesResource(MultiProcessWorker):
@@ -35,7 +40,7 @@ class SentenceFeaturesResource(MultiProcessWorker):
     def get_dataframe(self, event, corpus, extractor, threshold):
         path = self.get_path(event, corpus, extractor, threshold)
         with gzip.open(path, "r") as f:
-            return pd.read_csv(f, sep="\t", engine="python")
+            return pd.read_csv(f, converters={"tokens": eval, "tokens stopped": eval, "lemmas stopped": eval}, sep="\t") #, engine="python")
 
 
     def get_job_units(self, event, corpus, **kwargs):
@@ -223,8 +228,45 @@ class SentenceFeaturesResource(MultiProcessWorker):
             "Q_hypo_sent_cov",
             "Q_sent_hypo_cov",
         ]
+
+        sum_cols = [
+            "SUM_sbasic_sum",
+            "SUM_sbasic_amean",
+            "SUM_sbasic_max",
+            "SUM_novelty_gmean",
+            "SUM_novelty_amean",
+            "SUM_novelty_max",
+            "SUM_centrality",
+            "SUM_pagerank",
+        ]
+    
+        stream_cols = [
+            "STREAM_sbasic_sum",
+            "STREAM_sbasic_amean",
+            "STREAM_sbasic_max",
+            "STREAM_per_prob_sum",
+            "STREAM_per_prob_max",
+            "STREAM_per_prob_amean",
+            "STREAM_loc_prob_sum",
+            "STREAM_loc_prob_max",
+            "STREAM_loc_prob_amean",
+            "STREAM_org_prob_sum",
+            "STREAM_org_prob_max",
+            "STREAM_org_prob_amean",
+            "STREAM_nt_prob_sum",
+            "STREAM_nt_prob_max",
+            "STREAM_nt_prob_amean",
+        ]
+
+
  
-        all_cols = meta_cols + basic_cols + query_cols + lm_cols
+        all_cols = meta_cols + basic_cols + query_cols + lm_cols + sum_cols + stream_cols
+        
+        stream_uni_counts = defaultdict(int)
+        stream_per_counts = defaultdict(int)
+        stream_loc_counts = defaultdict(int)
+        stream_org_counts = defaultdict(int)
+        stream_nt_counts = defaultdict(int)
 
         with gzip.open(path, "w") as f:
             f.write("\t".join(all_cols) + "\n")
@@ -261,8 +303,8 @@ class SentenceFeaturesResource(MultiProcessWorker):
                                   if unicode(tok).lower() not in stopwords \
                                       and len(unicode(tok)) < 50],
                     doc)
-
-
+                
+                df["num tuples"] = [get_number_feats(sent) for sent in doc]
                 ### Basic Features ###
 
                 df["BASIC length"] = df["lemmas stopped"].apply(len)
@@ -373,6 +415,228 @@ class SentenceFeaturesResource(MultiProcessWorker):
                 self.compute_query_features(df, 
                     set([q.lower() for q in event.query]),
                     synonyms, hypernyms, hyponyms)
+
+
+                ### Single Doc Summarization Features ###
+                
+                counts = []
+                doc_counts = defaultdict(int)
+                for lemmas in df["lemmas stopped"].tolist():
+                    counts_i = {}
+                    for lem in lemmas:
+                        counts_i[lem.lower()] = counts_i.get(lem.lower(), 0) + 1
+                        doc_counts[lem.lower()] += 1
+                    doc_counts["__TOTAL__"] += len(lemmas)
+                    counts.append(counts_i)
+                doc_counts["__TOTAL__"] *= 1.
+                doc_uni = {key: val / doc_counts["__TOTAL__"] 
+                           for key, val in doc_counts.items() 
+
+                           if key != "__TOTAL__"}
+
+                sum_probs = []
+                amean_probs = []
+                max_probs = []
+                for lemmas in df["lemmas stopped"].tolist():
+                    probs = [doc_uni[lem.lower()] for lem in lemmas]
+                    sum_probs.append(np.sum(probs))
+                    amean_probs.append(np.mean(probs))
+                    max_probs.append(np.max(probs))
+
+                df["SUM_sbasic_sum"] = sum_probs
+                df["SUM_sbasic_amean"] = amean_probs
+                df["SUM_sbasic_max"] = max_probs
+
+                tfidfer = TfidfTransformer()
+                vec = DictVectorizer()
+                X = vec.fit_transform(counts)
+                X = tfidfer.fit_transform(X)
+        
+                ctrd = X.mean(axis=0)
+                K = cosine_similarity(ctrd, X).ravel()
+                I = K.argsort()[::-1]
+                R = np.array([[i, r + 1] for r, i in enumerate(I)])
+                R = R[R[:,0].argsort()]
+                df["SUM_centrality"] = R[:,1]
+               
+
+                K = cosine_similarity(X)
+                M = np.zeros_like(K)
+                M[np.diag_indices(K.shape[0])] = 1
+                Km = np.ma.masked_array(K, M)
+                D = 1 - Km
+        
+                novelty_amean = D.mean(axis=1)
+                novelty_max = D.max(axis=1)
+                novelty_gmean = gmean(D, axis=1)
+
+                df["SUM_novelty_amean"] = novelty_amean
+                df["SUM_novelty_max"] = novelty_max
+                df["SUM_novelty_gmean"] = novelty_gmean
+
+                K = (K > 0).astype("int32")
+                degrees = K.sum(axis=1) - 1
+                edges_x_2 = K.sum() - K.shape[0]
+                if edges_x_2 == 0: edges_x_2 = 1
+                pr = 1. - degrees / float(edges_x_2)
+                df["SUM_pagerank"] = pr
+                print df["pretty text"]
+               # print df[["SUM_sbasic_sum", "SUM_sbasic_amean", "SUM_sbasic_max"]]
+               # print df[
+               #     ["SUM_pagerank", "SUM_centrality", "SUM_novelty_gmean", 
+               #      "SUM_novelty_amean", "SUM_novelty_max"]]
+
+                ### Stream Features ###
+                for key, val in doc_counts.items():
+                    stream_uni_counts[key] += val      
+                denom = stream_uni_counts["__TOTAL__"]
+                sum_probs = []
+                amean_probs = []
+                max_probs = []
+                
+                for lemmas in df["lemmas stopped"].tolist():
+                    probs = [stream_uni_counts[lem.lower()] / denom for lem in lemmas]
+                    sum_probs.append(np.sum(probs))
+                    amean_probs.append(np.mean(probs))
+                    max_probs.append(np.max(probs))
+
+                df["STREAM_sbasic_sum"] = sum_probs
+                df["STREAM_sbasic_amean"] = amean_probs
+                df["STREAM_sbasic_max"] = max_probs
+
+
+
+                for lemmas, nes in izip(df["lemmas"].tolist(), df["ne"].tolist()):
+                    for lem, ne in izip(lemmas, nes):
+                        if ne == "PERSON":
+                            stream_per_counts[lem.lower()] += 1
+                            stream_per_counts["__TOTAL__"] += 1.                                    
+                        if ne == "LOCATION":
+                            stream_loc_counts[lem.lower()] += 1
+                            stream_loc_counts["__TOTAL__"] += 1.                                    
+                        if ne == "ORGANIZATION":
+                            stream_org_counts[lem.lower()] += 1
+                            stream_org_counts["__TOTAL__"] += 1.                                    
+
+
+                for tuples in df["num tuples"].tolist():
+
+                    for nt in tuples:
+                        for item in nt:
+                            stream_nt_counts[item.lower()] += 1
+                            stream_nt_counts["__TOTAL__"] += 1.
+
+                pdenom = stream_per_counts["__TOTAL__"]                
+                ldenom = stream_loc_counts["__TOTAL__"]                
+                odenom = stream_org_counts["__TOTAL__"]                
+                ntdenom = stream_nt_counts["__TOTAL__"]                
+                sum_per_probs = []
+                amean_per_probs = []
+                max_per_probs = []
+                sum_loc_probs = []
+                amean_loc_probs = []
+                max_loc_probs = []
+                sum_org_probs = []
+                amean_org_probs = []
+                max_org_probs = []
+                sum_nt_probs = []
+                amean_nt_probs = []
+                max_nt_probs = []
+
+                            
+                for tuples in df["num tuples"].tolist():
+                    if ntdenom > 0:
+                        nt_probs = [stream_nt_counts[item.lower()] / ntdenom
+                                    for nt in tuples
+                                    for item in nt]    
+                    else:
+                        nt_probs = []
+
+                    if len(nt_probs) > 0:
+                        sum_nt_probs.append(np.sum(nt_probs))
+                        amean_nt_probs.append(np.mean(nt_probs))
+                        max_nt_probs.append(np.max(nt_probs))
+                    else:
+                        sum_nt_probs.append(0)
+                        amean_nt_probs.append(0)
+                        max_nt_probs.append(0)
+
+
+                for lemmas, nes in izip(df["lemmas"].tolist(), df["ne"].tolist()):
+
+                    
+
+                    if pdenom > 0:
+                        per_probs = [stream_per_counts[lem.lower()] / pdenom
+                                     for lem, ne in izip(lemmas, nes)
+                                     if ne == "PERSON"]
+                    else:
+                        per_probs = []
+
+                    if len(per_probs) > 0:
+                        sum_per_probs.append(np.sum(per_probs))
+                        amean_per_probs.append(np.mean(per_probs))
+                        max_per_probs.append(np.max(per_probs))
+                    else:
+                        sum_per_probs.append(0)
+                        amean_per_probs.append(0)
+                        max_per_probs.append(0)
+
+                    if ldenom > 0:
+                        loc_probs = [stream_loc_counts[lem.lower()] / ldenom
+                                     for lem, ne in izip(lemmas, nes)
+                                     if ne == "LOCATION"]
+                    else:
+                        loc_probs = []
+
+                    if len(loc_probs) > 0 :
+                        sum_loc_probs.append(np.sum(loc_probs))
+                        amean_loc_probs.append(np.mean(loc_probs))
+                        max_loc_probs.append(np.max(loc_probs))
+                    else:
+                        sum_loc_probs.append(0)
+                        amean_loc_probs.append(0)
+                        max_loc_probs.append(0)
+
+                    if odenom > 0:
+                        org_probs = [stream_org_counts[lem.lower()] / odenom
+                                     for lem, ne in izip(lemmas, nes)
+                                     if ne == "ORGANIZATION"]
+                    else:
+                        org_probs = []
+
+                    if len(org_probs) > 0 :
+                        sum_org_probs.append(np.sum(org_probs))
+                        amean_org_probs.append(np.mean(org_probs))
+                        max_org_probs.append(np.max(org_probs))
+                    else:
+                        sum_org_probs.append(0)
+                        amean_org_probs.append(0)
+                        max_org_probs.append(0)
+
+
+
+                df["STREAM_per_prob_sum"] = sum_per_probs
+                df["STREAM_per_prob_max"] = max_per_probs
+                df["STREAM_per_prob_amean"] = amean_per_probs
+
+                df["STREAM_loc_prob_sum"] = sum_loc_probs
+                df["STREAM_loc_prob_max"] = max_loc_probs
+                df["STREAM_loc_prob_amean"] = amean_loc_probs
+
+                df["STREAM_org_prob_sum"] = sum_org_probs
+                df["STREAM_org_prob_max"] = max_org_probs
+                df["STREAM_org_prob_amean"] = amean_org_probs
+
+                df["STREAM_nt_prob_sum"] = sum_nt_probs
+                df["STREAM_nt_prob_max"] = max_nt_probs
+                df["STREAM_nt_prob_amean"] = amean_nt_probs
+
+                #print df[["STREAM_sbasic_sum", "STREAM_sbasic_amean", "STREAM_sbasic_max"]]
+                #print df[["STREAM_per_prob_sum", "STREAM_per_prob_amean", "STREAM_per_prob_max"]]  
+                #print df[["STREAM_loc_prob_sum", "STREAM_loc_prob_amean", "STREAM_loc_prob_max"]]  
+                #print df[["STREAM_nt_prob_sum", "STREAM_nt_prob_amean", "STREAM_nt_prob_max"]]  
+
 
                 ### Write dataframe to file ###
                 df[all_cols].to_csv(f, index=False, header=False, sep="\t")
