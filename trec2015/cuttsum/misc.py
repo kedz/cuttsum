@@ -193,9 +193,17 @@ def event2lm_name(event):
         return "accidents-lm"
     elif event.type == "shooting":
         return "terrorism-lm"
+    elif event.type == "hostage":
+        return "terrorism-lm"
     elif event.type == "storm":
         return "natural_disaster-lm"
     elif event.type == "earthquake":
         return "natural_disaster-lm"
     elif event.type == "bombing":
         return "terrorism-lm"
+    elif event.type == "riot":
+        return "social_unrest-lm" 
+    elif event.type == "protest":
+        return "social_unrest-lm" 
+    elif event.type == "impact event":
+        return "natural_disaster-lm"
