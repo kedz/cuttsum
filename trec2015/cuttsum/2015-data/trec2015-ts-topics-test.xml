@@ -1,6 +1,7 @@
 <events>
   <event>
     <id>26</id>
+    <title>vauxhall helicopter crash</title>
     <start>1358323140</start>
     <end>1359619140</end>
     <query>vauxhall helicopter crash</query>
@@ -8,6 +9,7 @@
   </event>
   <event>
     <id>27</id>
+    <title>cyclone nilam</title>
     <start>1351296000</start>
     <end>1351814400</end>
     <query>cyclone nilam</query>
@@ -15,6 +17,7 @@
   </event>
   <event>
     <id>28</id>
+    <title>savar building collapse</title>
     <start>1366771500</start>
     <end>1367635500</end>
     <query>savar building collapse</query>
@@ -22,6 +25,7 @@
   </event>
   <event>
     <id>29</id>
+    <title>hyderabad explosion</title>
     <start>1361455080</start>
     <end>1362319080</end>
     <query>hyderabad explosion</query>
@@ -29,6 +33,7 @@
   </event>
   <event>
     <id>30</id>
+    <title>brazzaville explosion</title>
     <start>1330844400</start>
     <end>1331708400</end>
     <query>brazzaville explosion</query>
@@ -36,6 +41,7 @@
   </event>
   <event>
     <id>31</id>
+    <title>india power blackouts</title>
     <start>1343596680</start>
     <end>1344028680</end>
     <query>india power blackouts</query>
@@ -43,6 +49,7 @@
   </event>
   <event>
     <id>32</id>
+    <title>innocence of muslims protests</title>
     <start>1347321600</start>
     <end>1348963200</end>
     <query>innocence of muslims protests</query>
@@ -50,6 +57,7 @@
   </event>
   <event>
     <id>33</id>
+    <title>konna battle</title>
     <start>1357776000</start>
     <end>1358553600</end>
     <query>konna battle</query>
@@ -57,6 +65,7 @@
   </event>
   <event>
     <id>34</id>
+    <title>quetta bombing</title>
     <start>1360972800</start>
     <end>1361318400</end>
     <query>quetta bombing</query>
@@ -64,6 +73,7 @@
   </event>
   <event>
     <id>35</id>
+    <title>iraq bombing 1</title>
     <start>1365984000</start>
     <end>1366416000</end>
     <query>iraq bombing</query>
@@ -71,6 +81,7 @@
   </event>
   <event>
     <id>36</id>
+    <title>iraq bombing 2</title>
     <start>1363651200</start>
     <end>1364083200</end>
     <query>iraq bombing</query>
@@ -78,6 +89,7 @@
   </event>
   <event>
     <id>37</id>
+    <title>los angeles arson</title>
     <start>1325149200</start>
     <end>1325754000</end>
     <query>los angeles arson</query>
@@ -85,6 +97,7 @@
   </event>
   <event>
     <id>38</id>
+    <title>thane building collapsed</title>
     <start>1365033600</start>
     <end>1365811200</end>
     <query>thane building collapsed</query>
@@ -92,6 +105,7 @@
   </event>
   <event>
     <id>39</id>
+    <title>suicide bomber ankara</title>
     <start>1359676800</start>
     <end>1360022400</end>
     <query>suicide bomber ankara</query>
@@ -99,6 +113,7 @@
   </event>
   <event>
     <id>40</id>
+    <title>baghdad bomb</title>
     <start>1324501200</start>
     <end>1324933200</end>
     <query>baghdad bomb</query>
@@ -106,6 +121,7 @@
   </event>
   <event>
     <id>41</id>
+    <title>aleppo university explosion</title>
     <start>1358208000</start>
     <end>1359072000</end>
     <query>aleppo university explosion</query>
@@ -113,6 +129,7 @@
   </event>
   <event>
     <id>42</id>
+    <title>carnival triumph fire</title>
     <start>1360454400</start>
     <end>1360886400</end>
     <query>carnival triumph fire</query>
@@ -120,6 +137,7 @@
   </event>
   <event>
     <id>43</id>
+    <title>uss guardian grounding</title>
     <start>1358380800</start>
     <end>1358812800</end>
     <query>uss guardian grounding</query>
@@ -127,6 +145,7 @@
   </event>
   <event>
     <id>44</id>
+    <title>aceh earthquake</title>
     <start>1334102400</start>
     <end>1334534400</end>
     <query>aceh earthquake</query>
@@ -134,6 +153,7 @@
   </event>
   <event>
     <id>45</id>
+    <title>haida gwaii earthquake</title>
     <start>1351393200</start>
     <end>1352257200</end>
     <query>haida gwaii earthquake</query>
@@ -141,6 +161,7 @@
   </event>
   <event>
     <id>46</id>
+    <title>catalan protest</title>
     <start>1347321600</start>
     <end>1347753600</end>
     <query>catalan protest</query>
