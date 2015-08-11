@@ -33,7 +33,8 @@ def get_2013_nuggets():
                    u'important', u'length', 'text'])
     return df
 
-
+def get_nuggets():
+    return pd.concat([get_2013_nuggets(), get_2014_nuggets()])
 
 def get_matches():
     df_2013 = get_2013_matches()
