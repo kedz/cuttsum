@@ -4,7 +4,8 @@ import streamcorpus as sc
 def get_raw_corpus(event):
     if event.query_id.startswith(u"TS13"):
         return EnglishAndUnknown2013()
-    elif event.query_id.startswith(u"TS14"):
+    elif event.query_id.startswith(u"TS14") \
+            or event.query_id.startswith(u"TS15"):
         return SerifOnly2014()
     else:
         raise Exception("Bad query id {}".format(event.query_id))
