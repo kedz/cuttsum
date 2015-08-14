@@ -35,7 +35,18 @@ class InputStreamResource(MultiProcessWorker):
             return [df.reset_index(drop=True) for sid, df in stream]
 
     def get_job_units(self, event, corpus, **kwargs):
-        return [0]
+        thresh = kwargs.get("dedupe-sim-threshold", .8)
+        extractor = kwargs.get("extractor", "goose")
+        delay = kwargs.get("delay", None)
+        topk = kwargs.get("top-k", 20)
+        
+        if delay is not None:
+            raise Exception("Delay must be None")
+        path = self.get_path(
+            event, corpus, extractor, thresh, delay, topk)
+        if not os.path.exists(path): return [0]
+
+        return []
 
 
     def do_job_unit(self, event, corpus, unit, **kwargs):  
@@ -64,6 +75,10 @@ class InputStreamResource(MultiProcessWorker):
         classify_nuggets = NuggetClassifier().get_classifier(event)
         if event.query_id.startswith("TS13"):
             judged = cuttsum.judgements.get_2013_updates() 
+            judged = judged[judged["query id"] == event.query_id]
+            judged_uids = set(judged["update id"].tolist())
+        elif event.query_id.startswith("TS14"):
+            judged = cuttsum.judgements.get_2014_sampled_updates() 
             judged = judged[judged["query id"] == event.query_id]
             judged_uids = set(judged["update id"].tolist())
         else:
