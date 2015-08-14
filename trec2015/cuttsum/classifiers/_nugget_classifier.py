@@ -140,7 +140,8 @@ class NuggetClassifier(MultiProcessWorker):
         #df = nuggets.filter(lambda x: len(x) > 10)
         #nugget_ids = list(set(df["nugget id"].tolist()))
         nugget_ids.sort()
-        units = [i for i, n in enumerate(nugget_ids)]
+        units = [i for i, n in enumerate(nugget_ids)
+                 if not os.path.exists(self.get_model_path(event, n, "gbc"))]
         return units
 
     def do_job_unit(self, event, corpus, unit, **kwargs):
