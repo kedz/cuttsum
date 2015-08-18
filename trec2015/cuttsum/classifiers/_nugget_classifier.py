@@ -124,7 +124,13 @@ class NuggetClassifier(MultiProcessWorker):
         model_path = self.get_model_path(event, nugget_id, "gbc")
         vec_path = self.get_vectorizer_path(event, nugget_id)
         if os.path.exists(model_path) and os.path.exists(vec_path):
-            vec, lemmas, stems = joblib.load(vec_path)
+            vec_pack = joblib.load(vec_path)
+            if len(vec_pack) == 3:
+                vec, lemmas, stems = vec_pack
+            else:
+                vec, lemmas = vec_pack
+                stems = None
+
             clf = joblib.load(model_path)           
             return (vec, clf, lemmas, stems)
         else:
@@ -214,7 +220,7 @@ class NuggetClassifier(MultiProcessWorker):
                 if not os.path.exists(model_dir):
                     os.makedirs(model_dir)
             
-                joblib.dump([None, set(nugget_lems)], self.get_vectorizer_path(event, nugget_id), compress=9)
+                joblib.dump([None, set(nugget_lems), Nugget_stems], self.get_vectorizer_path(event, nugget_id), compress=9)
                 joblib.dump([], self.get_model_path(event, nugget_id, "gbc"), compress=9)
                 return 
 
