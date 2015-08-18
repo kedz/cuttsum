@@ -40,7 +40,11 @@ class SentenceFeaturesResource(MultiProcessWorker):
     def get_dataframe(self, event, corpus, extractor, threshold):
         path = self.get_path(event, corpus, extractor, threshold)
         with gzip.open(path, "r") as f:
-            return pd.read_csv(f, converters={"tokens": eval, "tokens stopped": eval, "lemmas stopped": eval}, sep="\t") #, engine="python")
+            return pd.read_csv(f, converters={
+                "tokens": eval, 
+                "tokens stopped": eval, 
+                "lemmas stopped": eval,
+                "stems": eval}, sep="\t") #, engine="python")
 
 
     def get_job_units(self, event, corpus, **kwargs):
@@ -240,6 +244,11 @@ class SentenceFeaturesResource(MultiProcessWorker):
             "SUM_novelty_max",
             "SUM_centrality",
             "SUM_pagerank",
+            "SUM_sem_novelty_gmean",
+            "SUM_sem_novelty_amean",
+            "SUM_sem_novelty_max",
+            "SUM_sem_centrality",
+            "SUM_sem_pagerank",
         ]
     
         stream_cols = [
@@ -465,7 +474,15 @@ class SentenceFeaturesResource(MultiProcessWorker):
                 R = np.array([[i, r + 1] for r, i in enumerate(I)])
                 R = R[R[:,0].argsort()]
                 df["SUM_centrality"] = R[:,1]
-               
+                semsim = event2semsim(event)
+
+                L = semsim.transform(df["stems"].apply(lambda x: ' '.join(x)).tolist())
+                ctrd_l = L.mean(axis=0)
+                K_L = cosine_similarity(ctrd_l, L).ravel()                
+                I_L = K_L.argsort()[::-1]
+                R_L = np.array([[i, r + 1] for r, i in enumerate(I_L)])
+                R_L = R_L[R_L[:, 0].argsort()]
+                df["SUM_sem_centrality"] = R_L[:,1]
 
                 K = cosine_similarity(X)
                 M = np.zeros_like(K)
@@ -481,12 +498,38 @@ class SentenceFeaturesResource(MultiProcessWorker):
                 df["SUM_novelty_max"] = novelty_max
                 df["SUM_novelty_gmean"] = novelty_gmean
 
+                K_L = cosine_similarity(L)
+                M_L = np.zeros_like(K)
+                M_L[np.diag_indices(K_L.shape[0])] = 1
+                K_Lm = np.ma.masked_array(K_L, M_L)
+                D_L = 1 - K_Lm
+
+                sem_novelty_amean = D_L.mean(axis=1)
+                sem_novelty_max = D_L.max(axis=1)
+                sem_novelty_gmean = gmean(D_L, axis=1)
+
+                df["SUM_sem_novelty_amean"] = sem_novelty_amean
+                df["SUM_sem_novelty_max"] = sem_novelty_max
+                df["SUM_sem_novelty_gmean"] = sem_novelty_gmean
+
+
+
+
                 K = (K > 0).astype("int32")
                 degrees = K.sum(axis=1) - 1
                 edges_x_2 = K.sum() - K.shape[0]
                 if edges_x_2 == 0: edges_x_2 = 1
                 pr = 1. - degrees / float(edges_x_2)
                 df["SUM_pagerank"] = pr
+
+                K_L = (K_L > .5).astype("int32")
+                degrees_L = K_L.sum(axis=1) - 1
+                edges_x_2_L = K_L.sum() - K.shape[0]
+                if edges_x_2_L == 0: edges_x_2_L = 1
+                pr_L = 1. - degrees_L / float(edges_x_2_L)
+                df["SUM_sem_pagerank"] = pr_L
+
+
                 print df["pretty text"]
                # print df[["SUM_sbasic_sum", "SUM_sbasic_amean", "SUM_sbasic_max"]]
                # print df[
