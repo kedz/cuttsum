@@ -28,10 +28,14 @@ class NuggetClassifier(MultiProcessWorker):
     def get_classifier(self, event):
         path = os.path.join(self.dir_, event.fs_name())
         classifiers = []
+        semsim = event2semsim(event)
+        from nltk.stem.porter import PorterStemmer
+        stemmer = PorterStemmer()
+
         for nugget_id in os.listdir(path):
             model = self.get_best_model(event, nugget_id) 
             if model is not None:            
-                classifiers.append((nugget_id, model[0], model[1], model[2]))
+                classifiers.append((nugget_id, model[0], model[1], model[2], model[3]))
 
 #        def remove_punctuation(text):
 #            return re.sub(
@@ -42,6 +46,8 @@ class NuggetClassifier(MultiProcessWorker):
         def classify_nuggets(df):
             
             sents = [" ".join(lemmas).lower() for lemmas in df["lemmas stopped"].tolist()]
+            all_stems = [' '.join(stems) for stems in df["stems"].tolist()]
+
             sets = [set(sent.split(" ")) for sent in sents]         
             
             #sents = map(remove_punctuation, sents)
@@ -49,7 +55,7 @@ class NuggetClassifier(MultiProcessWorker):
             nugget_probs = [dict() for sent in sents]            
 
             all_probs = []
-            for nugget_id, vec, clf, nugget_lems in classifiers:
+            for nugget_id, vec, clf, nugget_lems, nugget_stems in classifiers:
                 if vec is not None and clf is not None:
                     
                     X = vec.transform(sents).todense()
@@ -57,7 +63,9 @@ class NuggetClassifier(MultiProcessWorker):
                              for lems in sets]
 
                     x_cov = np.array(x_cov)[:, np.newaxis]
-                    X = np.hstack([X, x_cov])
+                    K = cosine_similarity(semsim.transform(all_stems), 
+                                          semsim.transform(nugget_stems))
+                    X = np.hstack([X, x_cov, K, x_cov * K])
                     P = clf.predict_proba(X)
                     y = np.zeros(X.shape[0], dtype="int32")
                     #y[(P[:,1] > .95) | ((x_cov[:,0] > .75) & (len(nugget_lems) > 1))] = 1
@@ -116,9 +124,9 @@ class NuggetClassifier(MultiProcessWorker):
         model_path = self.get_model_path(event, nugget_id, "gbc")
         vec_path = self.get_vectorizer_path(event, nugget_id)
         if os.path.exists(model_path) and os.path.exists(vec_path):
-            vec, lemmas = joblib.load(vec_path)
+            vec, lemmas, stems = joblib.load(vec_path)
             clf = joblib.load(model_path)           
-            return (vec, clf, lemmas)
+            return (vec, clf, lemmas, stems)
         else:
             return None
 
@@ -278,7 +286,7 @@ class NuggetClassifier(MultiProcessWorker):
             if not os.path.exists(model_dir):
                 os.makedirs(model_dir)
 
-            joblib.dump([vec, nugget_lems], self.get_vectorizer_path(event, nugget_id), compress=9)
+            joblib.dump([vec, nugget_lems, nugget_stems], self.get_vectorizer_path(event, nugget_id), compress=9)
             joblib.dump(gbc, self.get_model_path(event, nugget_id, "gbc"), compress=9)
 
 #
