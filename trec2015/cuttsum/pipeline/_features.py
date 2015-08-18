@@ -191,6 +191,8 @@ class SentenceFeaturesResource(MultiProcessWorker):
         mention_counts = defaultdict(int)
         total_mentions = 0
 
+        from nltk.stem.porter import PorterStemmer
+        stemmer = PorterStemmer()
 
         synonyms, hypernyms, hyponyms = make_query_synsets()
 
@@ -200,7 +202,7 @@ class SentenceFeaturesResource(MultiProcessWorker):
         if not os.path.exists(dirname): os.makedirs(dirname)
 
         meta_cols = ["update id", "stream id", "sent id", "timestamp", 
-            "pretty text", "tokens", "lemmas", "pos", "ne", 
+            "pretty text", "tokens", "lemmas", "stems", "pos", "ne", 
             "tokens stopped", "lemmas stopped"]
 
         basic_cols = ["BASIC length", "BASIC char length", 
@@ -287,6 +289,9 @@ class SentenceFeaturesResource(MultiProcessWorker):
                 df["lemmas"] = map(lambda sent: [tok.lem.encode("utf-8") 
                                                  for tok in sent],
                                    doc)
+
+                df["stems"] = map(lambda sent: 
+                    [stemmer.stem(unicode(tok).lower()) for tok in sent], doc)
                 df["pos"] = map(lambda sent: [tok.pos for tok in sent],
                                 doc)
                 
@@ -396,14 +401,16 @@ class SentenceFeaturesResource(MultiProcessWorker):
 
                 dm_probs = df["lemmas"].apply(
                     lambda x: domain_lm.sentence_log_prob(
-                        " ".join([xi.lower() for xi in x])))
+                        " ".join([xi.decode("utf-8").lower().encode("utf-8") 
+                                  for xi in x if len(xi) < 50])))
                 dm_log_probs = [lp for lp, avg_lp in dm_probs.tolist()]
                 dm_avg_log_probs = [avg_lp for lp, avg_lp in dm_probs.tolist()]
                 df["LM domain lp"] = dm_log_probs
                 df["LM domain avg lp"] = dm_avg_log_probs
                 gw_probs = df["lemmas"].apply(
                     lambda x: gw_lm.sentence_log_prob(
-                        " ".join([xi.lower() for xi in x])))
+                        " ".join([xi.decode("utf-8").lower().encode("utf-8")
+                                  for xi in x if len(xi) < 50])))
                 gw_log_probs = [lp for lp, avg_lp in gw_probs.tolist()]
                 gw_avg_log_probs = [avg_lp for lp, avg_lp in gw_probs.tolist()]
                 df["LM gw lp"] = gw_log_probs

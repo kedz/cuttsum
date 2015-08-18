@@ -11,8 +11,11 @@ from sklearn.metrics import precision_score
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.externals import joblib
 import corenlp
-from cuttsum.misc import english_stopwords
-
+from cuttsum.misc import english_stopwords, event2semsim
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.cross_validation import StratifiedKFold
+from sklearn.metrics import classification_report
+from sklearn.ensemble import GradientBoostingClassifier
 
 class NuggetClassifier(MultiProcessWorker):
     def __init__(self):
@@ -182,12 +185,22 @@ class NuggetClassifier(MultiProcessWorker):
             n_nonmatching = min(n_matching, len(non_matching_updates))
             n_instances = n_matching + n_nonmatching
 
+            semsim = event2semsim(event)
+            from nltk.stem.porter import PorterStemmer
+            stemmer = PorterStemmer()
+
             nugget_doc = pipeline.annotate(nugget_text)
             nugget_lems = []
+            nugget_stems = []
             for sent in nugget_doc:
                 for tok in sent:
                     if unicode(tok).lower() not in stopwords and len(unicode(tok)) < 50:
                         nugget_lems.append(tok.lem.lower())
+                    stem = stemmer.stem(unicode(tok).lower())
+                    if len(stem) < 50:
+                        nugget_stems.append(stem)
+            nugget_stems = [u" ".join(nugget_stems)]
+
             if n_matching <= 10:
                 model_dir = self.get_model_dir(event, nugget_id)
                 if not os.path.exists(model_dir):
@@ -219,15 +232,20 @@ class NuggetClassifier(MultiProcessWorker):
             print "pipeline done"
 
             lemmas = []
-
+            all_stems = []
             for doc in docs:
                 lems = []
+                stems = []
                 for sent in doc:
                     for tok in sent:
                         if unicode(tok).lower() not in stopwords and len(unicode(tok)) < 50:
                             lems.append(tok.lem.lower())
+                        stem = stemmer.stem(unicode(tok).lower())
+                        if len(stem) < 50:
+                            stems.append(stem)
                 #print lems
                 lemmas.append(lems)
+                all_stems.append(u" ".join(stems))
 
                         
     # map(
@@ -235,6 +253,10 @@ class NuggetClassifier(MultiProcessWorker):
     #                                 for doc in docs
     #                                 for sent in doc
     #                                 for tok in sent
+
+            K = cosine_similarity(
+                semsim.transform(all_stems),
+                semsim.transform(nugget_stems))
 
             X_string = [u" ".join(lem) for lem in lemmas]
             vec = TfidfVectorizer(
@@ -246,13 +268,8 @@ class NuggetClassifier(MultiProcessWorker):
             x_cov = [len(nugget_lems.intersection(set(lems))) / float(len(nugget_lems))
                      for lems in lemmas]
             x_cov = np.array(x_cov)[:, np.newaxis]
-            X = np.hstack([X, x_cov])
-            #print X[:, -1]
-            #X_nug = vec.transform([u" ".join(nugget_lems)]).todense()
+            X = np.hstack([X, x_cov, K, K * x_cov])
             
-            from sklearn.cross_validation import StratifiedKFold
-            from sklearn.metrics import classification_report
-            from sklearn.ensemble import GradientBoostingClassifier
             
             gbc = GradientBoostingClassifier(n_estimators=500, learning_rate=.1,
                 max_depth=8, random_state=0, max_features="log2")

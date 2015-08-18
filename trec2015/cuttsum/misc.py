@@ -207,3 +207,29 @@ def event2lm_name(event):
         return "social_unrest-lm" 
     elif event.type == "impact event":
         return "natural_disaster-lm"
+
+def event2semsim(event):
+    import os
+    from sklearn.externals import joblib
+    etype = event.type
+    if etype == "accident":
+        return joblib.load(os.path.join(
+            os.getenv("TREC_DATA"),
+            "semsim", "accidents.norm-stem.lam20.000.pkl"))
+    elif etype== "earthquake" or etype == "storm" or etype == "impact event":
+        return joblib.load(
+            os.path.join(
+                os.getenv("TREC_DATA"), 
+                "semsim", "natural-disasters.norm-stem.lam20.000.pkl"))
+    elif etype == "protest" or etype == "riot":
+        return joblib.load(
+            os.path.join(
+                os.getenv("TREC_DATA"), 
+                "semsim", "social-unrest.norm-stem.lam1.000.pkl"))
+    elif etype == "shooting" or etype == "bombing" or etype == "conflict" or \
+            etype == "hostage":
+        return joblib.load(os.path.join(
+            os.getenv("TREC_DATA"),
+            "semsim", "terrorism.norm-stem.lam10.000.pkl"))
+
+
