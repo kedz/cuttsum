@@ -201,6 +201,8 @@ def event2lm_name(event):
         return "natural_disaster-lm"
     elif event.type == "bombing":
         return "terrorism-lm"
+    elif event.type == "conflict":
+        return "terrorism-lm"
     elif event.type == "riot":
         return "social_unrest-lm" 
     elif event.type == "protest":
@@ -211,7 +213,10 @@ def event2lm_name(event):
 def event2semsim(event):
     import os
     from sklearn.externals import joblib
-    etype = event.type
+    if isinstance(event, str):
+        etype = event
+    else:
+        etype = event.type
     if etype == "accident":
         return joblib.load(os.path.join(
             os.getenv("TREC_DATA"),
