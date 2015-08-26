@@ -28,7 +28,7 @@ class InputStreamResource(MultiProcessWorker):
         if not os.path.exists(path): return []
         
         with gzip.open(path, "r") as f:
-            df = pd.read_csv(f, converters={"nuggets": eval, "nugget probs": eval, 
+            df = pd.read_csv(f, converters={"nuggets": lambda x: eval(x) if x != "" else set(), "nugget probs": lambda x: eval(x) if x != "" else {}, 
                                             "lemmas stopped": eval, "stems": eval}, sep="\t")
             stream = [(sid, group) 
                       for sid, group in df.groupby("stream id")]
@@ -74,6 +74,7 @@ class InputStreamResource(MultiProcessWorker):
         
         from cuttsum.classifiers import NuggetClassifier
         classify_nuggets = NuggetClassifier().get_classifier(event)
+        eval_corpus = False
         if event.query_id.startswith("TS13"):
             judged = cuttsum.judgements.get_2013_updates() 
             judged = judged[judged["query id"] == event.query_id]
@@ -82,34 +83,41 @@ class InputStreamResource(MultiProcessWorker):
             judged = cuttsum.judgements.get_2014_sampled_updates() 
             judged = judged[judged["query id"] == event.query_id]
             judged_uids = set(judged["update id"].tolist())
+
+        elif event.query_id.startswith("TS15"):
+            eval_corpus = True
         else:
             raise Exception("Bad corpus!")
               
-      
-        feats_df["nuggets"] = feats_df["update id"].apply(
-            lambda x: set(
-                matches[matches["update id"] == x]["nugget id"].tolist()))
-        feats_df["n conf"] = feats_df["update id"].apply(lambda x: 1 if x in judged_uids else None)
-                
 
-            #if include_matches == "soft":
-                ### NOTE BENE: geting an array of indices to index unjudged
-                # sentences so I can force pandas to return a view and not a
-                # copy.
-        I = np.where(
-            feats_df["update id"].apply(lambda x: x not in judged_uids))[0]
-        
-        unjudged = feats_df[
-            feats_df["update id"].apply(lambda x: x not in judged_uids)]
-        #unjudged_sents = unjudged["sent text"].tolist()
-        #assert len(unjudged_sents) == I.shape[0]
-        feats_df["nugget probs"] = [dict() for x in xrange(len(feats_df))]
-        if I.shape[0] > 0:
-            nuggets, conf, nugget_probs = classify_nuggets(unjudged)
-            feats_df.loc[I, "nuggets"] = nuggets
-            feats_df.loc[I, "n conf"] = conf
-            feats_df.loc[I, "nugget probs"] = nugget_probs
+        if eval_corpus is False:      
+            feats_df["nuggets"] = feats_df["update id"].apply(
+                lambda x: set(
+                    matches[matches["update id"] == x]["nugget id"].tolist()))
+            feats_df["n conf"] = feats_df["update id"].apply(lambda x: 1 if x in judged_uids else None)
+                    
 
+                #if include_matches == "soft":
+                    ### NOTE BENE: geting an array of indices to index unjudged
+                    # sentences so I can force pandas to return a view and not a
+                    # copy.
+            I = np.where(
+                feats_df["update id"].apply(lambda x: x not in judged_uids))[0]
+            
+            unjudged = feats_df[
+                feats_df["update id"].apply(lambda x: x not in judged_uids)]
+            #unjudged_sents = unjudged["sent text"].tolist()
+            #assert len(unjudged_sents) == I.shape[0]
+            feats_df["nugget probs"] = [dict() for x in xrange(len(feats_df))]
+            if I.shape[0] > 0:
+                nuggets, conf, nugget_probs = classify_nuggets(unjudged)
+                feats_df.loc[I, "nuggets"] = nuggets
+                feats_df.loc[I, "n conf"] = conf
+                feats_df.loc[I, "nugget probs"] = nugget_probs
+        else:
+            feats_df["nuggets"] = None
+            feats_df["n conf"] = None
+            feats_df["nugget probs"] = None
 
 
 
@@ -123,7 +131,7 @@ class InputStreamResource(MultiProcessWorker):
         nugget_cols = ["nuggets", "n conf", "nugget probs"]
 
         ling_cols = [
-            "pretty text", "tokens", "lemmas", "pos", "ne", "tokens stopped",
+            "pretty text", "tokens", "lemmas", "stems", "pos", "ne", "tokens stopped",
             "lemmas stopped"]
 
         basic_cols = ["BASIC length", "BASIC char length",
@@ -160,6 +168,12 @@ class InputStreamResource(MultiProcessWorker):
             "SUM_novelty_max",
             "SUM_centrality",
             "SUM_pagerank",
+            "SUM_sem_novelty_gmean",
+            "SUM_sem_novelty_amean",
+            "SUM_sem_novelty_max",
+            "SUM_sem_centrality",
+            "SUM_sem_pagerank",
+
         ]
     
         stream_cols = [
