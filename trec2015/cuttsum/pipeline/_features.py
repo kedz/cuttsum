@@ -17,6 +17,7 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_extraction import DictVectorizer
 from collections import defaultdict
+from cuttsum.misc import event2semsim
 
 
 class SentenceFeaturesResource(MultiProcessWorker):
@@ -270,6 +271,7 @@ class SentenceFeaturesResource(MultiProcessWorker):
         ]
 
 
+        semsim = event2semsim(event)
  
         all_cols = meta_cols + basic_cols + query_cols + lm_cols + sum_cols + stream_cols
         
@@ -282,6 +284,9 @@ class SentenceFeaturesResource(MultiProcessWorker):
         with gzip.open(path, "w") as f:
             f.write("\t".join(all_cols) + "\n")
             for df in dfiter:
+                if len(df) == 1: continue
+                df = df.head(20)
+                
                 #df["lm"] = df["sent text"].apply(lambda x: lm.sentence_log_prob(x.encode("utf-8"))[1])
                 df["pretty text"] = df["sent text"].apply(heal_text)
                 df = df[df["pretty text"].apply(lambda x: len(x.strip())) > 0]
@@ -474,7 +479,6 @@ class SentenceFeaturesResource(MultiProcessWorker):
                 R = np.array([[i, r + 1] for r, i in enumerate(I)])
                 R = R[R[:,0].argsort()]
                 df["SUM_centrality"] = R[:,1]
-                semsim = event2semsim(event)
 
                 L = semsim.transform(df["stems"].apply(lambda x: ' '.join(x)).tolist())
                 ctrd_l = L.mean(axis=0)
@@ -522,9 +526,9 @@ class SentenceFeaturesResource(MultiProcessWorker):
                 pr = 1. - degrees / float(edges_x_2)
                 df["SUM_pagerank"] = pr
 
-                K_L = (K_L > .5).astype("int32")
+                K_L = (K_L > .2).astype("int32")
                 degrees_L = K_L.sum(axis=1) - 1
-                edges_x_2_L = K_L.sum() - K.shape[0]
+                edges_x_2_L = K_L.sum() - K_L.shape[0]
                 if edges_x_2_L == 0: edges_x_2_L = 1
                 pr_L = 1. - degrees_L / float(edges_x_2_L)
                 df["SUM_sem_pagerank"] = pr_L
