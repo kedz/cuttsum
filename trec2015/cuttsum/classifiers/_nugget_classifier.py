@@ -32,6 +32,8 @@ class NuggetClassifier(MultiProcessWorker):
         from nltk.stem.porter import PorterStemmer
         stemmer = PorterStemmer()
 
+        if not os.path.exists(path):
+            return None
         for nugget_id in os.listdir(path):
             model = self.get_best_model(event, nugget_id) 
             if model is not None:            
@@ -220,7 +222,7 @@ class NuggetClassifier(MultiProcessWorker):
                 if not os.path.exists(model_dir):
                     os.makedirs(model_dir)
             
-                joblib.dump([None, set(nugget_lems), Nugget_stems], self.get_vectorizer_path(event, nugget_id), compress=9)
+                joblib.dump([None, set(nugget_lems), nugget_stems], self.get_vectorizer_path(event, nugget_id), compress=9)
                 joblib.dump([], self.get_model_path(event, nugget_id, "gbc"), compress=9)
                 return 
 

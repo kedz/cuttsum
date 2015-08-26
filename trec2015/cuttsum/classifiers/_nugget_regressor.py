@@ -60,7 +60,13 @@ class NuggetRegressor(MultiProcessWorker):
 #    "SUM_novelty_max",
         "SUM_centrality",
         "SUM_pagerank",
-#]
+
+        "SUM_sem_novelty_gmean",
+        "SUM_sem_novelty_amean",
+#    "SUM_novelty_max",
+        "SUM_sem_centrality",
+        "SUM_sem_pagerank",
+ #]
 
 #stream_cols = [
         "STREAM_sbasic_sum",
@@ -103,7 +109,10 @@ class NuggetRegressor(MultiProcessWorker):
 
 
     def get_job_units(self, event, corpus, **kwargs):
-        return [0]
+        if not os.path.exists(self.get_model_path(event)):
+            return [0]
+        else:
+            return []
 
     def do_job_unit(self, event, corpus, unit, **kwargs):
         assert unit == 0
@@ -114,7 +123,7 @@ class NuggetRegressor(MultiProcessWorker):
         topk = kwargs.get('topk', 20)
 
         train_events = [e for e in cuttsum.events.get_events()
-                        if e.query_num < 11 \
+                        if e.query_num < 26 \
                         and e.query_num not in set([event.query_num, 7])]
         res = InputStreamResource()
 
@@ -130,6 +139,12 @@ class NuggetRegressor(MultiProcessWorker):
                 cuttsum.corpora.get_raw_corpus(train_event), 
                 extractor, thresh, delay, topk)
             for df in istream:
+
+                selector = (df["n conf"] == 1) & (df["nugget probs"].apply(len) == 0)
+                df.loc[selector, "nugget probs"] = \
+                    df.loc[selector, "nuggets"].apply(lambda x: {n:1 for n in x})
+
+
                 df["probs"] = df["nugget probs"].apply(lambda x: [val for key, val in x.items()] +[0])
                 df["probs"] = df["probs"].apply(lambda x: np.max(x))
                 df.loc[(df["n conf"] == 1) & (df["nuggets"].apply(len) == 0), "probs"] = 0
@@ -144,7 +159,7 @@ class NuggetRegressor(MultiProcessWorker):
             X_e = np.vstack(X_e)
             X.append(X_e)
 
-        print "WARNING NOT USING 2014 EVENTS"
+ #       print "WARNING NOT USING 2014 EVENTS"
         X = np.vstack(X)
         y = np.vstack(y)
 
