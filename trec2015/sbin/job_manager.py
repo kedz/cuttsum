@@ -164,6 +164,7 @@ def make_job_configurations(config_path):
     type_conv["soft_match"] = bool_checker
     type_conv["overwrite"] = bool_checker
     type_conv["preroll"] = int_checker
+    type_conv["2015F"] = bool_checker
 
     job_configurations = defaultdict(list)
     if config_path is not None:
@@ -190,7 +191,6 @@ def make_jobs(event_ids, resource_paths, config_path, service_configs):
     import cuttsum.corpora
     events = [event for event in cuttsum.events.get_events()
               if event.query_num in set(event_ids)]
-
     jobs = [] 
     resources = []    
     for resource_path in resource_paths:
@@ -215,6 +215,9 @@ def make_jobs(event_ids, resource_paths, config_path, service_configs):
                 else:
                     for job_name, job_settings in jobs_settings:
                         job_settings["service-configs"] = service_configs
+                        if job_settings.get("2015f", False) and event.query_id.startswith("TS15"):
+                            corpus = cuttsum.corpora.FilteredTS2015()
+
                         for unit in resource.get_job_units(
                                 event, corpus, **job_settings):
                             jobs.append(
@@ -346,6 +349,8 @@ if __name__ == u"__main__":
 
     parser.add_argument(u"--service-config", type=str, default=None,
                         help=u"path to service config file.")
+
+
 
     args = parser.parse_args()
     service_configs = parse_service_config(args.service_config)
