@@ -119,3 +119,29 @@ the TREC TS 2014 event queries."""
 
     def get_superset(self):
         return SerifOnly2014()
+
+class FilteredTS2015(_KBAStreamCorpus):
+    """This KBA StreamCorpus is a filtered version of the 2014 corpus 
+made specifically for the TS 2015 events."""
+
+    def __init__(self):
+        self.year_ = 2015
+        self.ver_ = u'1'
+        self.aws_url_ = u'http://s3.amazonaws.com/' + \
+            u'aws-publicdatasets/trec/ts/' + \
+            u'streamcorpus-2015-v1-ts-filtered/'
+
+    def fs_name(self):
+        return u'Trec-TS-2015F' 
+
+    def annotator(self):
+        return u'serif'
+
+    def sc_msg(self):
+        return sc.StreamItem_v0_3_0            
+
+    def is_subset(self):
+        return True
+
+    def get_superset(self):
+        return SerifOnly2014()
