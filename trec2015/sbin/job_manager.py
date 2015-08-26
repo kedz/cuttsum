@@ -2,21 +2,20 @@ from mpi4py import MPI
 from cuttsum.misc import enum
 from datetime import datetime
 
-
 tags = enum("READY", "DONE", "STOP", "ADD_JOB", "WORKER_START", "WORKER_STOP")
 
 def start_service(service, service_configs):
     if service == "corenlp":
         cnlp_config = service_configs.get("corenlp", {})
-        mem = cnlp_config.get("mem", "8G")
-        threads = int(cnlp_config.get("threads", 4))
+        mem = cnlp_config.get("mem", "50G")
+        threads = int(cnlp_config.get("threads", 25))
         max_message_len = int(cnlp_config.get("max_message_len", 524288))
         port = int(cnlp_config.get("port", 9999))
         import corenlp as cnlp
         cnlp.server.start(
             port=port,
             mem=mem, threads=threads, max_message_len=max_message_len,
-            annotators=["tokenize", "ssplit", "pos", "lemma", "ner", "parse"],
+            annotators=["tokenize", "ssplit", "pos", "lemma", "ner", "depparse"],
             corenlp_props={
                 "pos.maxlen": "150",
                 "ssplit.eolonly": "true"})
