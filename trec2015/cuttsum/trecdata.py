@@ -1,4 +1,5 @@
 from cuttsum.resources import MultiProcessWorker
+from pkg_resources import resource_filename
 import signal
 import requests
 import urllib3.exceptions
@@ -151,9 +152,15 @@ class SCChunkResource(MultiProcessWorker):
         if not os.path.exists(self.dir_):
             os.makedirs(self.dir_)
 
-    def get_chunks_for_hour(self, hour, corpus):
-        hour_dir = os.path.join(
-            self.dir_, corpus.fs_name(), hour.strftime(u'%Y-%m-%d-%H'))
+    def get_chunks_for_hour(self, hour, corpus, event):
+        if corpus.fs_name() == u"Trec-TS-2015F":
+            hour_dir = os.path.join(
+                self.dir_, corpus.fs_name(),
+                str(event.query_num), hour.strftime(u'%Y-%m-%d-%H'))
+
+        else:
+            hour_dir = os.path.join(
+                self.dir_, corpus.fs_name(), hour.strftime(u'%Y-%m-%d-%H'))
         if os.path.exists(hour_dir):
             chunks = [os.path.join(hour_dir, fname) for fname
                       in os.listdir(hour_dir)]
@@ -163,30 +170,49 @@ class SCChunkResource(MultiProcessWorker):
 
     def streamitem_iter(self, event, corpus):
         for hour in event.list_event_hours():
-            for chunk_path in self.get_chunks_for_hour(hour, corpus):
+            for chunk_path in self.get_chunks_for_hour(hour, corpus, event):
                 with sc.Chunk(path=chunk_path, mode="rb", 
                         message=corpus.sc_msg()) as chunk:
                     for si in chunk:
                         yield hour, chunk_path, si   
 
     def get_chunk_info_paths_urls(self, event, corpus, preroll=0):
-        data_dir = os.path.join(self.dir_, corpus.fs_name())
-        data = []
-        for url_path in UrlListResource().get_event_url_paths(
-            event, corpus, preroll=preroll, must_exist=True):
-            with gzip.open(url_path, u'r') as f:
+        if corpus.fs_name() != u'Trec-TS-2015F':
+
+            data_dir = os.path.join(self.dir_, corpus.fs_name())
+            data = []
+            for url_path in UrlListResource().get_event_url_paths(
+                event, corpus, preroll=preroll, must_exist=True):
+                with gzip.open(url_path, u'r') as f:
+                    for line in f:
+                        if line == '\n':
+                            continue
+                        if "index" in line:
+                            continue
+                        chunk = line.strip()
+                        chunk = os.path.splitext(chunk)[0]
+                        path = os.path.join(data_dir, chunk)
+                        url = '{}{}.gpg'.format(corpus.aws_url_, chunk)
+                        domain, count = os.path.split(path)[-1].split('-')[0:2]
+                        data.append((domain, int(count), path, url))
+            return data
+        else:
+            data = []
+            qnum_str = str(event.query_num)
+            data_dir = os.path.join(self.dir_, corpus.fs_name())
+            filtered2015_urls = resource_filename(
+                u'cuttsum', os.path.join(u'2015-data', u'trec-ts-2015F-news-only-urls.txt.gz'))
+            with gzip.open(filtered2015_urls, u'r') as f:
                 for line in f:
-                    if line == '\n':
-                        continue
-                    if "index" in line:
-                        continue
-                    chunk = line.strip()
-                    chunk = os.path.splitext(chunk)[0]
-                    path = os.path.join(data_dir, chunk)
-                    url = '{}{}.gpg'.format(corpus.aws_url_, chunk)
-                    domain, count = os.path.split(path)[-1].split('-')[0:2]
-                    data.append((domain, int(count), path, url))
-        return data
+                    if line.startswith(qnum_str):
+                        line = line.strip()
+                        domain = line.split("/")[-1].split("-")[0]
+                        count = int(line.split("/")[-1].split("-")[1])
+                        url = corpus.aws_url_ + line
+                        chunk = os.path.splitext(line)[0]
+                        path = os.path.join(data_dir, chunk)
+                        data.append((domain, count, path, url))
+            return data 
 
     def __unicode__(self):
         return unicode(self.__class__.__name__)
