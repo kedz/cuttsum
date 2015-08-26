@@ -24,27 +24,27 @@ class ArticlesResource(MultiProcessWorker):
         if not os.path.exists(self.dir_):
             os.makedirs(self.dir_)
 
-    def get_stats_df(self, event, extractor):
-        path = self.get_stats_path(event, extractor)
-        if not os.path.exists(path): return None
-        with open(path, "r") as f:
-            return pd.read_csv(f, sep="\t")
+#    def get_stats_df(self, event, extractor):
+#        path = self.get_stats_path(event, extractor)
+#        if not os.path.exists(path): return None
+ #       with open(path, "r") as f:
+  #          return pd.read_csv(f, sep="\t")
 
 
-    def get_stats_path(self, event, extractor):
-        return os.path.join(
-            self.dir_, extractor, event.fs_name(), 
-            "{}.stats.tsv".format(event.fs_name()))
+#    def get_stats_path(self, event, extractor):
+ #       return os.path.join(
+#  #          self.dir_, extractor, event.fs_name(), 
+       #     "{}.stats.tsv".format(event.fs_name()))
 
     def get_si(self, event, corpus, extractor, hour):
-        path = self.get_chunk_path(event, extractor, hour)
+        path = self.get_chunk_path(event, extractor, hour, corpus)
         if not os.path.exists(path): return []
         with sc.Chunk(path=path, mode="rb", message=corpus.sc_msg()) as chunk:
             return [si for si in chunk]
 
     def streamitem_iter(self, event, corpus, extractor):
         for hour in event.list_event_hours():
-            path = self.get_chunk_path(event, extractor, hour)
+            path = self.get_chunk_path(event, extractor, hour, corpus)
             if os.path.exists(path):
                 print path
                 try: 
@@ -122,7 +122,7 @@ class ArticlesResource(MultiProcessWorker):
             units = []
             for h, hour in enumerate(hours):
                 output_path = self.get_chunk_path(event, extractor, hour)
-                if overwrite is True or not os.path.exists(output_path):
+                if overwrite is True or ouput_path is None or not os.path.exists(output_path):
                     units.append(h)
             return units
 
@@ -130,8 +130,8 @@ class ArticlesResource(MultiProcessWorker):
             hours = event.list_event_hours()
             units = []
             for h, hour in enumerate(hours):
-                output_path = self.get_chunk_path(event, extractor, hour)
-                if overwrite is True or not os.path.exists(output_path):
+                output_path = self.get_chunk_path(event, extractor, hour, corpus)
+                if overwrite is True or output_path is None or not os.path.exists(output_path):
                     units.append(h)
             return units
 
@@ -167,9 +167,9 @@ class ArticlesResource(MultiProcessWorker):
                          for update_id in matches["update id"].tolist()])
             hours = sorted(list(hours))
             hour = hours[unit]
-            output_path = self.get_chunk_path(event, extractor, hour)
+            output_path = self.get_chunk_path(event, extractor, hour, corpus)
             gold_si = []
-            for path in chunks_resource.get_chunks_for_hour(hour, corpus):
+            for path in chunks_resource.get_chunks_for_hour(hour, corpus, event):
                 with sc.Chunk(path=path, mode="rb", 
                         message=corpus.sc_msg()) as chunk:
                     for si in chunk:
@@ -200,10 +200,10 @@ class ArticlesResource(MultiProcessWorker):
             g = Goose(config)
             
             hour = event.list_event_hours()[unit]
-            output_path_tmp = self.get_chunk_template(event, extractor, hour)
+            output_path_tmp = self.get_chunk_template(event, extractor, hour, corpus)
             good_si = []
 
-            for path in chunks_resource.get_chunks_for_hour(hour, corpus):
+            for path in chunks_resource.get_chunks_for_hour(hour, corpus, event):
                 try:
                     with sc.Chunk(path=path, mode="rb", 
                             message=corpus.sc_msg()) as chunk:
@@ -336,14 +336,14 @@ class ArticlesResource(MultiProcessWorker):
             return n_covered / float(n_hours)
 
 
-    def get_chunk_template(self, event, extractor, hour):
-        data_dir = os.path.join(self.dir_, extractor, event.fs_name())
+    def get_chunk_template(self, event, extractor, hour, corpus):
+        data_dir = os.path.join(self.dir_, extractor, corpus.fs_name(), event.fs_name())
         fname = u'{}-' + u'{}.sc.gz'.format(hour.strftime(u'%Y-%m-%d-%H'))
         return os.path.join(data_dir, fname)
 
 
-    def get_chunk_path(self, event, extractor, hour):
-        data_dir = os.path.join(self.dir_, extractor, event.fs_name())
+    def get_chunk_path(self, event, extractor, hour, corpus):
+        data_dir = os.path.join(self.dir_, extractor, corpus.fs_name(), event.fs_name())
         hour_str = "{}.sc.gz".format(hour.strftime(u'%Y-%m-%d-%H'))
         if not os.path.exists(data_dir):
             return None
