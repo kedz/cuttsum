@@ -66,6 +66,11 @@ for cat, cat_df in df.groupby("cat"):
 print pd.concat(by_cat).mean().to_frame().T
 
 
-results = pd.concat(results.mean().to_frame().T for thr, results in df.groupby("thr"))
+mean_results = []
+for thr, results in df.groupby("thr"):
+    tmp = results.mean().to_frame().T 
+    tmp["thr"] = thr
+    mean_results.append(tmp)
+results = pd.concat(mean_results)
 results.reset_index(drop=True, inplace=True)
 print results.loc[results["F1"].argmax()].to_frame().T

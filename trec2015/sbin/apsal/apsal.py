@@ -54,11 +54,36 @@ def get_input_stream(event, gold_probs, extractor="goose", thresh=.8, delay=None
 
     df["nuggets"] = df["nuggets"].apply(lambda x: x if len(x) <= max_nuggets else set([]))
 
+    from cuttsum.pipeline import DedupedArticlesResource
+    ded = DedupedArticlesResource()
+    stats_df = ded.get_stats_df(event, corpus, extractor, thresh)
+    stats_df["stream ids"] = stats_df["stream ids"].apply(lambda x: set(eval(x)))
+    sid2match = {}
+    for _, row in stats_df.iterrows():
+        for sid in row["stream ids"]:
+            sid2match[sid] = row["match"]
+
+    all_ts = []
+    all_docs = []
+    new_docs = []
+    for (sid, ts), doc in df.groupby(["stream id", "timestamp"]):
+#            print sub_doc
+        if len(all_ts) > 0:
+            assert ts >= all_ts[-1]
+        all_ts.append(ts)
+        if sid2match[sid] is True:
+            new_docs.append(doc)
+        all_docs.append(doc)
+
+        
+    df = pd.concat(new_docs)    
+    print len(all_docs), len(new_docs)
+
     return df
 
 
 for event in cuttsum.events.get_events():
-    if event.query_num == 7 or event.query_num > 25: continue
+    if event.query_num in set([7, 24]) or event.query_num > 25: continue
     print event
     semsim = event2semsim(event)
     istream = get_input_stream(event, False, extractor="goose", 

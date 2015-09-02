@@ -17,12 +17,6 @@ def sigmoid(x):
     return 1. / (1. + math.exp(-x))
 
 
-lm2thr = {
-    "accidents-lm": 0.15,
-    "natural_disaster-lm": 0.10,
-    "social_unrest-lm": 0.70,
-    "terrorism-lm": 0.40,
-}
 
 matches_df = cuttsum.judgements.get_merged_dataframe()
 def get_input_stream(event, gold_probs, extractor="goose", thresh=.8, delay=None, topk=20):
@@ -82,8 +76,8 @@ with open("apsal.tsv", "w") as o:
         with open("clusters-2015/{}.tsv".format(event.query_id), "r") as f:
             df = pd.read_csv(f, sep="\t", converters={"stems": eval, "nuggets": eval})
 
-        thresh = lm2thr[event2lm_name(event)]
-        thresh = .7
+        #thresh = lm2thr[event2lm_name(event)]
+        thresh = .65
 
         cache = None
         semsim = event2semsim(event)
