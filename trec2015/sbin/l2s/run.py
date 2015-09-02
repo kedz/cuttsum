@@ -15,6 +15,9 @@ from itertools import izip
 import os
 import cuttsum.judgements
 from cuttsum.misc import event2semsim
+import math
+
+np.random.seed(42)
 
 matches_df = cuttsum.judgements.get_merged_dataframe()
 tags = enum("READY", "WORKER_START", "WORKER_STOP")
@@ -172,6 +175,9 @@ class Summarizer(pyvw.SearchTask):
         self.use_best_feats = False
         self.use_i_only = False
         self.use_abs_df = False
+        self._scores = []
+        self._keep_scores = False
+        self._doc_condition = False
     
     def feat_weight(self, idx):
         if idx >= fmap._idx:
@@ -211,10 +217,20 @@ class Summarizer(pyvw.SearchTask):
     def set_loss(self, loss):
         self._loss = loss
 
-    def make_example(self, sent, cache, cache_in, days, x, cache_latent, dfdelta):
+    def make_example(self, sent, cache, cache_in, days, x, cache_latent, dfdelta, ):
         if self.log_time is True:
             days = np.log(2 + days)
         df = sent.to_frame().transpose()
+
+        if self._doc_condition is True:
+            if cache is not None:
+                doc_condition = (cache["stream id"] == sent["stream id"]).astype("int32").sum()
+                dc_feat = [("NUM_PREV_SELECTED_IN_DOC_{}".format(doc_condition), 1)]
+            else:
+                dc_feat = [("NUM_PREV_SELECTED_IN_DOC_0", 1)]
+
+        else: dc_feat = []
+
         feats = {
             "b": [(k, df[k].tolist()[0]) for k in basic_cols],
             "c": [(k, df[k].tolist()[0]) for k in sum_cols],
@@ -222,8 +238,10 @@ class Summarizer(pyvw.SearchTask):
             "l": [(k, df[k].tolist()[0]) for k in lm_cols],
             "s": [(k, df[k].tolist()[0]) for k in stream_cols],
             "p": [("probs",sent["probs"])],
+            "d": dc_feat,
             #"t": [("time", days)],
          #   "g": ["GAIN_POS" if gain > 0 else "GAIN_ZERO"],
+            
         }  
            
 
@@ -258,7 +276,7 @@ class Summarizer(pyvw.SearchTask):
 #                feats["I"].append(("{}^prob".format(feat), val * sent["probs"]))
 #                feats["I"].append(("{}^time".format(feat), val * days))
 
-        for ns in ["b", "c", "q", "l", "s", "g"]:
+        for ns in ["b", "c", "q", "l", "s", "g", "d"]:
             for feat, val in feats[ns]:
                 feats["I"].append(("{}^df^prob".format(feat), val * sent["probs"] * dfdelta))
                 feats["I"].append(("{}^prob".format(feat), val * sent["probs"]))
@@ -267,24 +285,36 @@ class Summarizer(pyvw.SearchTask):
  
         ifeats = {'a': []}
         if self.use_i_only:
-            ns = ["I"]
+            NS = ["I"]
         else:
-            ns = ["b", "c", "q", "l", "s", "g", "p", "I"]
+            NS = ["b", "c", "q", "l", "s", "g", "p", "d", "I"]
 
         if self.use_best_feats:
 
-            for ns in ["b", "c", "q", "l", "s", "g", "p", "I"]:
+            for ns in NS:
                 for key, val in feats[ns]: 
                     if key not in best_feats: continue
                     ifeats['a'].append((fmap[key], val))
             ifeats['a'].append((fmap["CONSTANT"], 1))
 
         else:
-            for ns in ["b", "c", "q", "l", "s", "g", "p", "I"]:
+            for ns in NS:
                 for key, val in feats[ns]: 
                     ifeats['a'].append((fmap[key], val))
             ifeats['a'].append((fmap["CONSTANT"], 1))
-        return self.example(ifeats)
+
+        ex = self.example(ifeats)
+                 
+            
+            #select_weight = sum(self.vw.get_weight(idx, 0) * val for idx, val in ifeats['a'])
+            #next_weight = sum(self.vw.get_weight(fmap._idx + idx , 0) * val for idx, val in ifeats['a'])
+            #print select_weight, next_weight            
+#self._scores.append({"SELECT": select_weight, "NEXT": next_weight})            
+         #   self._scores.append(ex.get_partial_prediction())
+            #print select_weight, next_weight, self.example(ifeats).get_label() #, self.example(ifeats).get_costsensitive_partial_prediction(1)  #self.vw.get_partial_prediction(self.example(ifeats)
+             
+        
+        return ex
 
     def _run(self, (event, df_stream, X_stream, dfdeltas)):
 
@@ -331,6 +361,33 @@ class Summarizer(pyvw.SearchTask):
                 condition=[], # (n-1, "p"), ])
             )
             output.append(pred)
+
+            #if examples is not None:
+            if self._keep_scores:
+            #if self._keep_scores:
+                #print "HERE"
+                #lab = pyvw.cost_sensitive_label()
+                #print "HERE2"
+                #lab.from_example(examples)
+                #print "HERE3"
+                #for wc in lab.costs:
+                 #   print wc.partial_prediction,
+                #print pred
+                #print examples.get_costsensitive_partial_prediction(1)
+            #select_weight = sum(self.vw.get_weight(idx, 0) * val for idx, val in ifeats['a'])
+            #next_weight = sum(self.vw.get_weight(fmap._idx + idx , 0) * val for idx, val in ifeats['a'])
+            #self._scores.append({"SELECT": select_weight, "NEXT": next_weight})            
+                self._scores.append(examples.get_partial_prediction())
+
+            #if examples is not None: 
+            #    print self._scores[-1], examples.get_partial_prediction(), "SELECT" if oracle == SELECT else "NEXT", "PRED: SELECT" if pred == SELECT else "PRED: NEXT"
+
+                #print examples.get_simplelabel_label(), examples.get_multiclass_label(), oracle, 1 / (1 + math.exp(-examples.get_partial_prediction())), pred
+                #print pyvw.cost_sensitive_label().from_example(examples)
+               # if self._keep_scores:
+               #     ascore = self._scores[-1]
+               #     print ascore, ascore["SELECT"] >= ascore["NEXT"] if pred == SELECT else ascore["SELECT"] <= ascore["NEXT"], ascore["SELECT"] + ascore["NEXT"]
+            #print select_weight, next_weight, self.example(ifeats).get_label() #, self.example(ifeats).get_costsensitive_partial_prediction(1)  #self.vw.get_partial_prediction(self.example(ifeats)
             if pred != oracle:
                 if oracle == SELECT:
                     loss += self._loss
@@ -346,6 +403,7 @@ class Summarizer(pyvw.SearchTask):
 
             elif pred == SKIP and oracle == SELECT:
                 size_y += 1
+
 
 
             #if self._with_scores is True:
@@ -365,7 +423,9 @@ class Summarizer(pyvw.SearchTask):
 #                else:
 #                    cache_in = pd.concat([cache_in, sent.to_frame().transpose()])
 
-        loss = 1 - float(y_int_y_hat) / (size_y + size_y_hat)
+        Z = size_y + size_y_hat
+        if Z == 0: Z = 1
+        loss = 1 - float(y_int_y_hat) / Z
 
         self.sch.loss(loss)
 
@@ -644,9 +704,15 @@ def do_work(training_events, test_event, sample_size, samples_per_event,
     return scores_df, weights_df, summary_df
 
 
-def get_input_stream(event, gold_probs, extractor="goose", thresh=.8, delay=None, topk=20):
+def get_input_stream(event, gold_probs, extractor="goose", thresh=.8, delay=None, topk=20, 
+        use_2015F=False, truncate=False):
     max_nuggets = 3
+    
     corpus = cuttsum.corpora.get_raw_corpus(event)
+    if use_2015F is True and event.query_num > 25:
+        corpus = cuttsum.corpora.FilteredTS2015()
+    print event, corpus
+
     res = InputStreamResource()
     df = pd.concat(
         res.get_dataframes(event, corpus, extractor, thresh, delay, topk))
@@ -684,6 +750,33 @@ def get_input_stream(event, gold_probs, extractor="goose", thresh=.8, delay=None
 
     df["nuggets"] = df["nuggets"].apply(lambda x: x if len(x) <= max_nuggets else set([]))
 
+
+    from cuttsum.pipeline import DedupedArticlesResource
+    ded = DedupedArticlesResource()
+    stats_df = ded.get_stats_df(event, corpus, extractor, thresh)
+    stats_df["stream ids"] = stats_df["stream ids"].apply(lambda x: set(eval(x)))
+    sid2match = {}
+    for _, row in stats_df.iterrows():
+        for sid in row["stream ids"]:
+            sid2match[sid] = row["match"]
+
+    all_ts = []
+    all_docs = []
+    new_docs = []
+    for (sid, ts), doc in df.groupby(["stream id", "timestamp"]):
+        if truncate is True:
+            doc = doc.iloc[0:5]
+#            print sub_doc
+        if len(all_ts) > 0:
+            assert ts >= all_ts[-1]
+        all_ts.append(ts)
+        if sid2match[sid] is True:
+            new_docs.append(doc)
+        all_docs.append(doc)
+
+        
+    df = pd.concat(new_docs)    
+    print len(all_docs), len(new_docs)
     return df
 
 
@@ -695,9 +788,24 @@ def ds(df, sample_size=100):
     return df.iloc[I]
 
 def predict(task, event_stream, n_iter):
-        
+
+ #   task._keep_scores = True        
     pred = task.predict(event_stream)
     pred = ["SELECT" if p == SELECT else "SKIP" for p in pred]
+#    scores = task._scores
+
+  #  for score, action in zip(scores, pred):
+  #      sel = math.exp(- ( score["SELECT"])) 
+  #      nex = math.exp(- score["NEXT"]) 
+  #      Z = sel + nex
+  #      p_sel = 1. / (1. + sel) 
+  #      p_sel = sel / Z
+ #       p_nex = 1. / (1. + nex)          #
+ #       p_nex = nex / Z
+
+#        print p_sel, p_nex,  action
+#p_nex, action
+
     all_nuggets = set()
     for nuggets in event_stream[1]["nuggets"].tolist():
         all_nuggets.update(nuggets)
@@ -754,19 +862,21 @@ def predict(task, event_stream, n_iter):
 
 def do_work(train_instances, dev_instances, test_instances, sample_size, samples_per_event,
         gold_probs, iters, l2, log_time, semsims, dfdeltas,
-        use_best_feats, use_i_only, use_abs_df, output_dir):
+        use_best_feats, use_i_only, use_abs_df, doc_condition, output_dir):
     
 
     vw = pyvw.vw(
-        ("--l2 {} --search 2 --search_task hook --ring_size 1024 " + \
+        ("-l .001 --l2 {} --search 2 --search_task hook --ring_size 1024 " + \
          "--search_no_caching --noconstant --quiet").format(l2)) 
     task = vw.init_search_task(Summarizer)
     task.use_best_feats = use_best_feats
     task.use_i_only = use_i_only
     task.use_abs_df = use_abs_df
+    task._doc_condition = doc_condition
     print "use best?", task.use_best_feats 
     print "use i only?", task.use_i_only
     print "use abs df?", task.use_abs_df
+    print "use doc condition?", task._doc_condition
 
 
 
@@ -823,15 +933,19 @@ def do_work(train_instances, dev_instances, test_instances, sample_size, samples
             event = test_instance[0]
             df = test_instance[1]
             print event
+            task._keep_scores = True
+            task._scores = []
             predictions = task.predict(test_instance)
+            assert len(predictions) == len(task._scores)
 
-            for action, (_, row) in zip(predictions, df.iterrows()):
+            for action, (_, row), ascore in zip(predictions, df.iterrows(), task._scores):
                 if action == SELECT:
+                  #  assert ascore["SELECT"] <= ascore["NEXT"]
                     print "{}\t{}\t{}\t{}\t{}\t{}\t{}".format(
                         event.query_num, "CUNLP", run, 
                         "-".join(row["update id"].split("-")[0:2]), 
                         row["update id"].split("-")[2], 
-                        row["timestamp"], row["probs"])
+                        row["timestamp"], ascore)
                     all_summaries.append(
                         {"event": event.query_num, 
                          "team": "CUNLP",
@@ -840,18 +954,32 @@ def do_work(train_instances, dev_instances, test_instances, sample_size, samples
                          "sentence id": row["update id"].split("-")[2], 
                          "timestamp": row["timestamp"],
                          "confidence": row["probs"],
+                         "partial": ascore,
                          "text": row["sent text"],
                          "pretty text": row["pretty text"]
                         })
-
+                #else:
+                  #  assert ascore["SELECT"] >= ascore["NEXT"]
 #    all_scores = []
+#    task.set_weights(F1_weights)
 #    for i, inst in enumerate(dev_instances):
 #        egain, comp, f1, loss, _ = predict(task, inst, best_f1_iter)
 #        print egain, comp, f1, loss
 #        all_scores.append({"iter": n_iter, "E[gain]": egain, "Comp.": comp, "F1": f1, "Loss": loss})
- #   df = pd.DataFrame(all_scores)
- #   df_u = df.groupby("iter").mean().reset_index(drop=True)
+#    df = pd.DataFrame(all_scores)
+#    df_u = df.groupby("iter").mean().reset_index(drop=True)
 #    print df_u    
+#
+#    all_scores = []
+#    task.set_weights(egain_weights)
+#    for i, inst in enumerate(dev_instances):
+#        egain, comp, f1, loss, _ = predict(task, inst, best_egain_iter)
+#        print egain, comp, f1, loss
+#        all_scores.append({"iter": n_iter, "E[gain]": egain, "Comp.": comp, "F1": f1, "Loss": loss})
+#    df = pd.DataFrame(all_scores)
+#    df_u = df.groupby("iter").mean().reset_index(drop=True)
+#    print df_u    
+
 
 
     get_summaries(F1_weights, "L2S.F1")
@@ -862,7 +990,7 @@ def do_work(train_instances, dev_instances, test_instances, sample_size, samples
             
     df = pd.DataFrame(all_summaries, 
         columns=["event", "team", "run", "stream id", "sentence id", 
-                 "timestamp", "confidence", "pretty text", "text"])
+                 "timestamp", "confidence", "partial", "pretty text", "text"])
     submission_path = os.path.join(output_dir, "submission.tsv")
     summary_path = os.path.join(output_dir, "summaries.tsv")
     f1_weights_path = os.path.join(output_dir, "weights.f1.tsv")
@@ -873,7 +1001,7 @@ def do_work(train_instances, dev_instances, test_instances, sample_size, samples
     scores_path = os.path.join(output_dir, "scores.tsv")
 
     no_text = ["event", "team", "run", "stream id", "sentence id", 
-               "timestamp", "confidence"]
+               "timestamp", "confidence", "partial"]
     
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -917,20 +1045,23 @@ def make_subsamples(streams, samples_per_stream, sample_size, dfdeltas, semsims)
 
 
 def main(sample_size, samples_per_event, gold_probs, iters, l2, log_time,
-        use_best_feats, use_i_only, use_abs_df, output_dir):
+        use_best_feats, use_i_only, use_abs_df, output_dir, use_2015F, truncate,
+        doc_condition):
     semsims = get_all_semsim()
     dfdeltas = get_dfdeltas()
 
     streams = []
     for event in cuttsum.events.get_events():
-        if event.query_num == 7 or event.query_num > 25: continue
-        df = get_input_stream(event, gold_probs)
+        
+        if event.query_num in set([24, 7]) or event.query_num > 25: continue
+        df = get_input_stream(event, gold_probs, use_2015F=use_2015F, truncate=truncate)
         streams.append((event, df))
         
     test_streams = []
     for event in cuttsum.events.get_events():
         if event.query_num < 26: continue
-        df = get_input_stream(event, gold_probs)
+
+        df = get_input_stream(event, gold_probs, use_2015F=use_2015F, truncate=truncate)
 
         X_l = semsims[event.type].transform(
             df["stems"].apply(lambda x: ' '.join(x)).tolist())  
@@ -948,7 +1079,7 @@ def main(sample_size, samples_per_event, gold_probs, iters, l2, log_time,
     job_results = do_work(
         train_instances, dev_instances, test_streams, 
         sample_size, samples_per_event, gold_probs, iters, l2, log_time, semsims, dfdeltas,
-        use_best_feats, use_i_only, use_abs_df, output_dir)
+        use_best_feats, use_i_only, use_abs_df, doc_condition, output_dir)
 
     
 if __name__ == u"__main__":
@@ -989,7 +1120,17 @@ if __name__ == u"__main__":
         help=u"Use absolute value of df deltas.")
 
 
+    parser.add_argument(
+        u"--filter", action="store_true", default=False, 
+        help=u"Use 2015F corpus.")
 
+    parser.add_argument(
+        u"--truncate", action="store_true", default=False, 
+        help=u"Use first 5 sentences per doc.")
+
+    parser.add_argument(
+        u"--doc-condition", action="store_true", default=False, 
+        help=u"Condition on number of selects in current document")
     
     parser.add_argument(
         u"--log-time", action="store_true", default=False, 
@@ -999,6 +1140,7 @@ if __name__ == u"__main__":
 
     main(args.sample_size, args.samples_per_event, 
          args.gold_probs, args.iters, args.l2, args.log_time,
-         args.best_feats, args.i_only, args.abs_df, args.output_dir)
+         args.best_feats, args.i_only, args.abs_df, args.output_dir,
+         args.filter, args.truncate, args.doc_condition)
 
 
