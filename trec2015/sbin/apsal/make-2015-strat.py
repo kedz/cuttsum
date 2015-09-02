@@ -17,11 +17,10 @@ def sigmoid(x):
     return 1. / (1. + math.exp(-x))
 
 
-
 lm2thr = {
-    "accidents-lm": 0.15,
+    "accidents-lm": 0.65,
     "natural_disaster-lm": 0.10,
-    "social_unrest-lm": 0.70,
+    "social_unrest-lm": 0.65,
     "terrorism-lm": 0.40,
 }
 
@@ -75,7 +74,7 @@ event2size = {}
 
 all_results = []
 data = []
-with open("apsal.strat.tsv", "w") as o:
+with open("apsal.strat.tsv", "w") as o, open("apsal.strat.sum.tsv", "w") as sumo:
     for event in cuttsum.events.get_events():
         if event.query_num < 26: continue
         istream = get_input_stream(event, False)
@@ -104,9 +103,12 @@ with open("apsal.strat.tsv", "w") as o:
                         all_results.append(row.to_dict())
         for result in results:
             print "{}\t{}\t{}\t{}\t{}\t{}\t{}".format(
-                event.query_num, "cunlp", "APSAL2", "-".join(result["update id"].split("-")[:2]), result["update id"].split("-")[-1], result["timestamp"], sigmoid(result["probs"]))
+                event.query_num, "cunlp", "4APSAL", "-".join(result["update id"].split("-")[:2]), result["update id"].split("-")[-1], result["timestamp"], sigmoid(result["probs"]))
             o.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
-                event.query_num, "cunlp", "APSAL2", "-".join(result["update id"].split("-")[:2]), result["update id"].split("-")[-1], result["timestamp"], sigmoid(result["probs"])))
+                event.query_num, "cunlp", "4APSAL", "-".join(result["update id"].split("-")[:2]), result["update id"].split("-")[-1], result["timestamp"], sigmoid(result["probs"])))
+            sumo.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
+                event.query_num, "cunlp", "4APSAL", "-".join(result["update id"].split("-")[:2]), result["update id"].split("-")[-1], result["timestamp"], sigmoid(result["probs"]), result["sent text"]))
+
 
     #pd.DataFrame(results, columns=["update id", "timestamp", "sent text", "probs"])
             

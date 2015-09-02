@@ -16,7 +16,7 @@ def epoch(dt):
 matches_df = cuttsum.judgements.get_merged_dataframe()
 def get_input_stream(event, gold_probs, extractor="goose", thresh=.8, delay=None, topk=20):
     max_nuggets = 3
-    corpus = cuttsum.corpora.get_raw_corpus(event)
+    corpus = cuttsum.corpora.FilteredTS2015()
     res = InputStreamResource()
     df = pd.concat(
         res.get_dataframes(event, corpus, extractor, thresh, delay, topk))
