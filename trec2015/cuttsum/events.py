@@ -38,6 +38,13 @@ def get_2015_events(by_query_ids=None, by_event_types=None):
 def read_events(event_xml, by_query_ids=None, by_event_types=None, prefix=''):
     if isinstance(by_query_ids, list):
         by_query_ids = set(by_query_ids)
+        
+    if by_query_ids is not None:
+        by_query_ids = set(
+            ["{}{}".format(prefix, qid) if isinstance(qid, int) else qid
+             for qid in by_query_ids]
+        )
+
     if isinstance(by_event_types, list):
         by_event_types = set(by_event_types)
     ts_events = []
