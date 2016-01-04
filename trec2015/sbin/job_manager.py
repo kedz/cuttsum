@@ -164,7 +164,7 @@ def make_job_configurations(config_path):
     type_conv["soft_match"] = bool_checker
     type_conv["overwrite"] = bool_checker
     type_conv["preroll"] = int_checker
-    type_conv["2015F"] = bool_checker
+    type_conv["2015f"] = bool_checker
 
     job_configurations = defaultdict(list)
     if config_path is not None:
@@ -215,8 +215,11 @@ def make_jobs(event_ids, resource_paths, config_path, service_configs):
                 else:
                     for job_name, job_settings in jobs_settings:
                         job_settings["service-configs"] = service_configs
-                        if job_settings.get("2015f", False) and event.query_id.startswith("TS15"):
+                        if job_settings.get("2015f", False) \
+                                and event.query_id.startswith("TS15"):
                             corpus = cuttsum.corpora.FilteredTS2015()
+                        else:
+                            corpus = cuttsum.corpora.get_raw_corpus(event)
 
                         for unit in resource.get_job_units(
                                 event, corpus, **job_settings):
