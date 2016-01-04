@@ -178,7 +178,7 @@ class NuggetClassifier(MultiProcessWorker):
         #nugget_ids = list(set(all_nuggets["nugget id"].tolist()))
         nugget_ids.sort()
         nugget_id = nugget_ids[unit]
-        with corenlp.Server(port=9876 + event.query_num * 100 + unit, mem="20G", threads=8, max_message_len=524288,
+        with corenlp.Server(port=9876 + event.query_num * 100 + unit, mem="20G", threads=4, max_message_len=524288,
                 annotators=["tokenize", "ssplit", "pos", "lemma"], #, "ner"],
                 corenlp_props={
                     "pos.maxlen": 50, "ssplit.eolonly": "true"}) as pipeline:
@@ -187,6 +187,8 @@ class NuggetClassifier(MultiProcessWorker):
                 updates = cuttsum.judgements.get_2013_updates()
             elif event.query_id.startswith("TS14"):
                 updates = cuttsum.judgements.get_2014_sampled_updates()
+            elif event.query_id.startswith("TS15"):
+                updates = cuttsum.judgements.get_2015_sampled_updates()
 
             updates = updates[updates["query id"] == event.query_id]  
             non_matching_updates = updates[updates["update id"].apply(
@@ -244,7 +246,7 @@ class NuggetClassifier(MultiProcessWorker):
             y = y[p]
             X_string = [X_string[i] for i in p]
             print "pipeline start"
-            docs = pipeline.annotate_mp(X_string, n_procs=8)
+            docs = pipeline.annotate_mp(X_string, n_procs=4)
             print "pipeline done"
 
             lemmas = []
@@ -287,15 +289,19 @@ class NuggetClassifier(MultiProcessWorker):
             X = np.hstack([X, x_cov, K, K * x_cov])
             
             
-            gbc = GradientBoostingClassifier(n_estimators=500, learning_rate=.1,
+            gbc = GradientBoostingClassifier(
+                n_estimators=500, learning_rate=.1,
                 max_depth=8, random_state=0, max_features="log2")
             gbc.fit(X, y)
+            print "SCORE", gbc.score(X, y)
             model_dir = self.get_model_dir(event, nugget_id)
             if not os.path.exists(model_dir):
                 os.makedirs(model_dir)
 
-            joblib.dump([vec, nugget_lems, nugget_stems], self.get_vectorizer_path(event, nugget_id), compress=9)
-            joblib.dump(gbc, self.get_model_path(event, nugget_id, "gbc"), compress=9)
+            joblib.dump([vec, nugget_lems, nugget_stems], 
+                self.get_vectorizer_path(event, nugget_id), compress=9)
+            joblib.dump(
+                gbc, self.get_model_path(event, nugget_id, "gbc"), compress=9)
 
 #
 #

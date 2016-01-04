@@ -109,6 +109,7 @@ class NuggetRegressor(MultiProcessWorker):
 
 
     def get_job_units(self, event, corpus, **kwargs):
+        print self.get_model_path(event)
         if not os.path.exists(self.get_model_path(event)):
             return [0]
         else:
@@ -123,8 +124,7 @@ class NuggetRegressor(MultiProcessWorker):
         topk = kwargs.get('topk', 20)
 
         train_events = [e for e in cuttsum.events.get_events()
-                        if e.query_num < 26 \
-                        and e.query_num not in set([event.query_num, 7])]
+                        if e.query_num not in set([event.query_num, 7])]
         res = InputStreamResource()
 
         y = []
@@ -166,8 +166,9 @@ class NuggetRegressor(MultiProcessWorker):
         gbc = GradientBoostingRegressor(
             n_estimators=100, learning_rate=1.,
             max_depth=3, random_state=0)
-        print "fitting"
+        print "fitting", event
         gbc.fit(X, y.ravel())
+        print event, "SCORE", gbc.score(X, y.ravel())
         
         model_dir = self.get_model_dir(event)
         if not os.path.exists(model_dir):
