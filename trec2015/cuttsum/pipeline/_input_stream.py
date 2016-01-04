@@ -85,7 +85,9 @@ class InputStreamResource(MultiProcessWorker):
             judged_uids = set(judged["update id"].tolist())
 
         elif event.query_id.startswith("TS15"):
-            eval_corpus = True
+            judged = cuttsum.judgements.get_2015_sampled_updates() 
+            judged = judged[judged["query id"] == event.query_id]
+            judged_uids = set(judged["update id"].tolist())
         else:
             raise Exception("Bad corpus!")
               
