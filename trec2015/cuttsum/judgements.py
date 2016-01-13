@@ -54,7 +54,8 @@ def get_nuggets():
 def get_matches():
     df_2013 = get_2013_matches()
     df_2014 = get_2014_matches()
-    return pd.concat([df_2013, df_2014])
+    df_2015 = get_2015_matches()
+    return pd.concat([df_2013, df_2014, df_2015])
 
 def get_2013_matches():
     matches_tsv = resource_filename(
@@ -77,6 +78,19 @@ def get_2014_matches():
             names=[u'query id', u'update id', u'nugget id',
                    u'match start', u'match end', 'auto p'])
     return df
+
+def get_2015_matches():
+    matches_tsv = resource_filename(
+            u'cuttsum', os.path.join(u'2015-data', u'matches.tsv.gz'))
+    with gzip.open(matches_tsv, u'r') as f:
+        df = pd.io.parsers.read_csv(
+            f, sep='\t', quoting=3, header=0,
+            dtype={u'match start': int, u'match end': int},
+            names=[u'query id', u'update id', u'nugget id',
+                   u'match start', u'match end', 'auto p'])
+    return df
+
+
 
 def get_mturk_matches():
     matches_tsv = resource_filename(
